@@ -3,6 +3,7 @@
 #include "pasteitem.h"
 #include <QDialog>
 
+class QLineEdit;
 class QPlainTextEdit;
 class QKeySequenceEdit;
 
@@ -15,6 +16,7 @@ public:
     PasteItem item() const;
 
 private:
+    QLineEdit        *m_titleEdit;
     QPlainTextEdit   *m_textEdit;
     QKeySequenceEdit *m_hotkeyEdit;
 };

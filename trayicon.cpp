@@ -11,11 +11,11 @@
 #include <QCursor>
 #include <QTimer>
 #include <QStyle>
+#include <QIcon>
+#include <QPixmap>
 
-#ifdef Q_OS_LINUX
-#include <X11/Xlib.h>
-#include <X11/keysym.h>
-#include <unistd.h>
+#ifdef Q_OS_WIN
+#include <windows.h>
 #endif
 
 TrayIcon::TrayIcon(QObject *parent)
@@ -23,16 +23,19 @@ TrayIcon::TrayIcon(QObject *parent)
 {
     // --- Tray icon ---
     m_tray = new QSystemTrayIcon(this);
-    // Use a built-in Qt icon as placeholder; replace with a real icon resource later
-    m_tray->setIcon(QApplication::style()->standardIcon(QStyle::SP_DialogSaveButton));
-    m_tray->setToolTip("Fast Paste");
+    QIcon appIcon(":/assets/icon.ico");
+    if (appIcon.isNull())
+        appIcon = QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
+    m_tray->setIcon(appIcon);
+    qApp->setWindowIcon(appIcon); // also sets taskbar / window title-bar icon
+    m_tray->setToolTip("Fast Paste\nLeft-click to open picker\nRight-click for menu");
 
     // --- Tray menu ---
     m_trayMenu = new QMenu();
-    QAction *actSettings = m_trayMenu->addAction("Settings…");
-    QAction *actAbout    = m_trayMenu->addAction("About");
+    QAction *actSettings = m_trayMenu->addAction("⚙  Settings…");
+    QAction *actAbout    = m_trayMenu->addAction("ℹ  About");
     m_trayMenu->addSeparator();
-    QAction *actQuit = m_trayMenu->addAction("Quit");
+    QAction *actQuit = m_trayMenu->addAction("✕  Quit");
 
     connect(actSettings, &QAction::triggered, this, &TrayIcon::onSettingsTriggered);
     connect(actAbout,    &QAction::triggered, this, &TrayIcon::onAboutTriggered);
@@ -42,17 +45,18 @@ TrayIcon::TrayIcon(QObject *parent)
     connect(m_tray, &QSystemTrayIcon::activated, this, &TrayIcon::onTrayActivated);
     m_tray->show();
 
-    // --- Settings window ---
-    m_settingsWin = new SettingsWindow();
-    connect(m_settingsWin, &SettingsWindow::dataChanged,
-            this, &TrayIcon::onDataChanged);
-
     // --- Hotkey manager ---
     m_hotkeyMgr = new HotkeyManager(this);
     connect(m_hotkeyMgr, &HotkeyManager::pickerRequested,
             this, &TrayIcon::showPickerMenu);
     connect(m_hotkeyMgr, &HotkeyManager::itemTriggered,
             this, &TrayIcon::pasteItem);
+
+    // --- Settings window ---
+    m_settingsWin = new SettingsWindow();
+    m_settingsWin->setHotkeyManager(m_hotkeyMgr);
+    connect(m_settingsWin, &SettingsWindow::dataChanged,
+            this, &TrayIcon::onDataChanged);
 
     loadAndApply();
 }
@@ -90,8 +94,11 @@ void TrayIcon::onSettingsTriggered()
 void TrayIcon::onAboutTriggered()
 {
     QMessageBox::about(nullptr, "About Fast Paste",
-        "<b>Fast Paste</b><br>"
+        "<b>Fast Paste</b><br><br>"
         "Quickly paste pre-configured text snippets via a global hotkey or system tray.<br><br>"
+        "• Press the configured global hotkey to open the picker menu<br>"
+        "• Configure per-item hotkeys to paste directly<br>"
+        "• Text can contain multiple lines<br><br>"
         "Version 1.0");
 }
 
@@ -112,23 +119,30 @@ void TrayIcon::showPickerMenu()
 {
     if (m_items.isEmpty()) {
         m_tray->showMessage("Fast Paste",
-            "No items configured. Open Settings to add some.",
-            QSystemTrayIcon::Information, 2000);
+            "No items configured.\nRight-click the tray icon → Settings to add some.",
+            QSystemTrayIcon::Information, 3000);
         return;
     }
 
     QMenu menu;
+    menu.setTitle("Fast Paste");
+
     for (int i = 0; i < m_items.size(); ++i) {
         const PasteItem &item = m_items[i];
 
-        // Label: first line of text (truncated to 60 chars)
-        QString label = item.text;
-        int nl = label.indexOf('\n');
-        if (nl != -1) label = label.left(nl) + "…";
-        if (label.length() > 60) label = label.left(60) + "…";
+        // Use title if set, otherwise fall back to first line of text
+        QString label = item.title.trimmed();
+        if (label.isEmpty()) {
+            label = item.text;
+            int nl = label.indexOf('\n');
+            if (nl != -1) label = label.left(nl) + "…";
+            if (label.length() > 60) label = label.left(60) + "…";
+        }
         if (label.trimmed().isEmpty()) label = QString("(item %1)").arg(i + 1);
 
-        QAction *act = menu.addAction(label);
+        QString displayLabel = QString("%1. %2").arg(i + 1).arg(label);
+
+        QAction *act = menu.addAction(displayLabel);
         if (!item.hotkey.isEmpty())
             act->setShortcut(item.hotkey);
 
@@ -146,55 +160,35 @@ void TrayIcon::pasteItem(int index)
     // 1. Set clipboard
     QApplication::clipboard()->setText(m_items[index].text);
 
-    // 2. Send Ctrl+V to the previously focused window.
-    //    We delay slightly so the menu can close first.
-    QTimer::singleShot(80, this, [this] { sendCtrlV(); });
+    // 2. Wait for menu to close, then send Ctrl+V to the previously focused window
+    QTimer::singleShot(150, this, [this] { sendCtrlV(); });
 }
 
 void TrayIcon::sendCtrlV()
 {
-#ifdef Q_OS_LINUX
-    Display *dpy = XOpenDisplay(nullptr);
-    if (!dpy) return;
-
-    // Find the window that currently holds focus
-    Window focusWin = 0;
-    int revert = 0;
-    XGetInputFocus(dpy, &focusWin, &revert);
-
-    if (focusWin == None || focusWin == PointerRoot) {
-        XCloseDisplay(dpy);
-        return;
-    }
-
-    KeyCode vKey     = XKeysymToKeycode(dpy, XK_v);
-    KeyCode ctrlKey  = XKeysymToKeycode(dpy, XK_Control_L);
+#ifdef Q_OS_WIN
+    INPUT inputs[4] = {};
 
     // Press Ctrl
-    XEvent ev{};
-    ev.type                = KeyPress;
-    ev.xkey.display        = dpy;
-    ev.xkey.window         = focusWin;
-    ev.xkey.root           = DefaultRootWindow(dpy);
-    ev.xkey.time           = CurrentTime;
-    ev.xkey.state          = ControlMask;
-    ev.xkey.keycode        = ctrlKey;
-    ev.xkey.same_screen    = True;
-    XSendEvent(dpy, focusWin, True, KeyPressMask, &ev);
+    inputs[0].type       = INPUT_KEYBOARD;
+    inputs[0].ki.wVk     = VK_CONTROL;
+    inputs[0].ki.dwFlags = 0;
 
     // Press V
-    ev.xkey.keycode = vKey;
-    XSendEvent(dpy, focusWin, True, KeyPressMask, &ev);
+    inputs[1].type       = INPUT_KEYBOARD;
+    inputs[1].ki.wVk     = 'V';
+    inputs[1].ki.dwFlags = 0;
 
     // Release V
-    ev.type = KeyRelease;
-    XSendEvent(dpy, focusWin, True, KeyReleaseMask, &ev);
+    inputs[2].type       = INPUT_KEYBOARD;
+    inputs[2].ki.wVk     = 'V';
+    inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
 
     // Release Ctrl
-    ev.xkey.keycode = ctrlKey;
-    XSendEvent(dpy, focusWin, True, KeyReleaseMask, &ev);
+    inputs[3].type       = INPUT_KEYBOARD;
+    inputs[3].ki.wVk     = VK_CONTROL;
+    inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
 
-    XFlush(dpy);
-    XCloseDisplay(dpy);
+    SendInput(4, inputs, sizeof(INPUT));
 #endif
 }

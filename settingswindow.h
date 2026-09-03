@@ -1,6 +1,7 @@
 #pragma once
 
 #include "pasteitem.h"
+#include "hotkeymanager.h"
 #include <QMainWindow>
 #include <QList>
 #include <QKeySequence>
@@ -19,6 +20,7 @@ public:
     ~SettingsWindow() override;
 
     void setData(const QList<PasteItem> &items, const QKeySequence &globalHotkey);
+    void setHotkeyManager(HotkeyManager *mgr);
 
 signals:
     void dataChanged(const QList<PasteItem> &items, const QKeySequence &globalHotkey);
@@ -30,13 +32,13 @@ private slots:
     void onMoveUp(int index);
     void onMoveDown(int index);
     void onGlobalHotkeyChanged();
+    void rebuildList(); // also called when hotkey registration changes
 
 private:
-    void rebuildList();
-
     Ui::SettingsWindow *ui;
-    QList<PasteItem> m_items;
-    QKeySequence m_globalHotkey;
-    QWidget *m_listContainer = nullptr;
-    QVBoxLayout *m_listLayout = nullptr;
+    QList<PasteItem>   m_items;
+    QKeySequence       m_globalHotkey;
+    QWidget           *m_listContainer = nullptr;
+    QVBoxLayout       *m_listLayout    = nullptr;
+    HotkeyManager     *m_hotkeyMgr    = nullptr;
 };

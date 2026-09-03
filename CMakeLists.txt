@@ -26,7 +26,13 @@ set(PROJECT_SOURCES
     settingswindow.ui
     itemeditordiag.h
     itemeditordiag.cpp
+    resources.qrc
 )
+
+# Windows: embed icon into the executable via .rc file
+if(WIN32)
+    list(APPEND PROJECT_SOURCES app.rc)
+endif()
 
 if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     qt_add_executable(qt-fast-copy
@@ -35,13 +41,9 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
     )
 else()
     if(ANDROID)
-        add_library(qt-fast-copy SHARED
-            ${PROJECT_SOURCES}
-        )
+        add_library(qt-fast-copy SHARED ${PROJECT_SOURCES})
     else()
-        add_executable(qt-fast-copy
-            ${PROJECT_SOURCES}
-        )
+        add_executable(qt-fast-copy ${PROJECT_SOURCES})
     endif()
 endif()
 
@@ -50,18 +52,21 @@ target_link_libraries(qt-fast-copy PRIVATE
     Qt${QT_VERSION_MAJOR}::Gui
 )
 
-# Linux X11 global hotkey support
-if(UNIX AND NOT APPLE)
-    find_package(X11 REQUIRED)
-    target_link_libraries(qt-fast-copy PRIVATE ${X11_LIBRARIES})
-    target_include_directories(qt-fast-copy PRIVATE ${X11_INCLUDE_DIR})
+# Windows: link user32 for RegisterHotKey / SendInput (already implicit, but explicit is safer)
+if(WIN32)
+    target_link_libraries(qt-fast-copy PRIVATE user32)
 endif()
 
-if(${QT_VERSION} VERSION_LESS 6.1.0)
-    set(BUNDLE_ID_OPTION MACOSX_BUNDLE_GUI_IDENTIFIER com.example.qt-fast-copy)
+# Linux X11 global hotkey support (kept for portability)
+if(UNIX AND NOT APPLE)
+    find_package(X11)
+    if(X11_FOUND)
+        target_link_libraries(qt-fast-copy PRIVATE ${X11_LIBRARIES})
+        target_include_directories(qt-fast-copy PRIVATE ${X11_INCLUDE_DIR})
+    endif()
 endif()
+
 set_target_properties(qt-fast-copy PROPERTIES
-    ${BUNDLE_ID_OPTION}
     MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION}
     MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}
     MACOSX_BUNDLE TRUE

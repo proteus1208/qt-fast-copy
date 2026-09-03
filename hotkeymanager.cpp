@@ -1,198 +1,234 @@
 #include "hotkeymanager.h"
+
 #include <QApplication>
 #include <QDebug>
 
-#ifdef Q_OS_LINUX
-#include <X11/Xlib.h>
-#include <X11/keysym.h>
+#ifdef Q_OS_WIN
+#include <windows.h>
 
-// Convert Qt modifier flags -> X11 modifier mask
-static unsigned qtModsToX11(Qt::KeyboardModifiers mods)
+static UINT qtModsToWin(Qt::KeyboardModifiers mods)
 {
-    unsigned x = 0;
-    if (mods & Qt::ShiftModifier)   x |= ShiftMask;
-    if (mods & Qt::ControlModifier) x |= ControlMask;
-    if (mods & Qt::AltModifier)     x |= Mod1Mask;
-    if (mods & Qt::MetaModifier)    x |= Mod4Mask;
-    return x;
+    UINT w = 0;
+    if (mods & Qt::AltModifier)     w |= MOD_ALT;
+    if (mods & Qt::ControlModifier) w |= MOD_CONTROL;
+    if (mods & Qt::ShiftModifier)   w |= MOD_SHIFT;
+    if (mods & Qt::MetaModifier)    w |= MOD_WIN;
+    return w;
 }
 
-// Convert Qt key -> X11 KeySym
-static KeySym qtKeyToKeySym(int qtKey)
+static UINT qtKeyToVK(Qt::Key key)
 {
-    // Letters/digits map directly
-    if (qtKey >= Qt::Key_A && qtKey <= Qt::Key_Z)
-        return XK_a + (qtKey - Qt::Key_A);
-    if (qtKey >= Qt::Key_0 && qtKey <= Qt::Key_9)
-        return XK_0 + (qtKey - Qt::Key_0);
+    if (key >= Qt::Key_A && key <= Qt::Key_Z)
+        return 'A' + (key - Qt::Key_A);
+    if (key >= Qt::Key_0 && key <= Qt::Key_9)
+        return '0' + (key - Qt::Key_0);
+    if (key >= Qt::Key_F1 && key <= Qt::Key_F24)
+        return VK_F1 + (key - Qt::Key_F1);
 
-    switch (qtKey) {
-    case Qt::Key_F1:  return XK_F1;
-    case Qt::Key_F2:  return XK_F2;
-    case Qt::Key_F3:  return XK_F3;
-    case Qt::Key_F4:  return XK_F4;
-    case Qt::Key_F5:  return XK_F5;
-    case Qt::Key_F6:  return XK_F6;
-    case Qt::Key_F7:  return XK_F7;
-    case Qt::Key_F8:  return XK_F8;
-    case Qt::Key_F9:  return XK_F9;
-    case Qt::Key_F10: return XK_F10;
-    case Qt::Key_F11: return XK_F11;
-    case Qt::Key_F12: return XK_F12;
-    case Qt::Key_Space: return XK_space;
-    case Qt::Key_Return: return XK_Return;
-    case Qt::Key_Escape: return XK_Escape;
+    switch (key) {
+    case Qt::Key_Space:        return VK_SPACE;
+    case Qt::Key_Return:       return VK_RETURN;
+    case Qt::Key_Enter:        return VK_RETURN;
+    case Qt::Key_Escape:       return VK_ESCAPE;
+    case Qt::Key_Tab:          return VK_TAB;
+    case Qt::Key_Backspace:    return VK_BACK;
+    case Qt::Key_Delete:       return VK_DELETE;
+    case Qt::Key_Insert:       return VK_INSERT;
+    case Qt::Key_Home:         return VK_HOME;
+    case Qt::Key_End:          return VK_END;
+    case Qt::Key_PageUp:       return VK_PRIOR;
+    case Qt::Key_PageDown:     return VK_NEXT;
+    case Qt::Key_Left:         return VK_LEFT;
+    case Qt::Key_Right:        return VK_RIGHT;
+    case Qt::Key_Up:           return VK_UP;
+    case Qt::Key_Down:         return VK_DOWN;
+    case Qt::Key_Print:        return VK_SNAPSHOT;
+    case Qt::Key_Pause:        return VK_PAUSE;
+    case Qt::Key_CapsLock:     return VK_CAPITAL;
+    case Qt::Key_NumLock:      return VK_NUMLOCK;
+    case Qt::Key_ScrollLock:   return VK_SCROLL;
+    case Qt::Key_Semicolon:    return VK_OEM_1;
+    case Qt::Key_Equal:        return VK_OEM_PLUS;
+    case Qt::Key_Comma:        return VK_OEM_COMMA;
+    case Qt::Key_Minus:        return VK_OEM_MINUS;
+    case Qt::Key_Period:       return VK_OEM_PERIOD;
+    case Qt::Key_Slash:        return VK_OEM_2;
+    case Qt::Key_QuoteLeft:    return VK_OEM_3;
+    case Qt::Key_BracketLeft:  return VK_OEM_4;
+    case Qt::Key_Backslash:    return VK_OEM_5;
+    case Qt::Key_BracketRight: return VK_OEM_6;
+    case Qt::Key_Apostrophe:   return VK_OEM_7;
     default: return 0;
     }
 }
-#endif // Q_OS_LINUX
+
+static bool decodeSequence(const QKeySequence &seq,
+                            Qt::Key &outKey,
+                            Qt::KeyboardModifiers &outMods)
+{
+    if (seq.isEmpty()) return false;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    outKey  = seq[0].key();
+    outMods = seq[0].keyboardModifiers();
+#else
+    int combo = seq[0];
+    outKey  = static_cast<Qt::Key>(combo & ~Qt::KeyboardModifierMask);
+    outMods = static_cast<Qt::KeyboardModifiers>(combo & Qt::KeyboardModifierMask);
+#endif
+    return true;
+}
+#endif // Q_OS_WIN
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 HotkeyManager::HotkeyManager(QObject *parent)
     : QObject(parent)
 {
-#ifdef Q_OS_LINUX
-    m_display = XOpenDisplay(nullptr);
-    if (m_display)
-        m_rootWindow = DefaultRootWindow(static_cast<Display *>(m_display));
     qApp->installNativeEventFilter(this);
-#endif
 }
 
 HotkeyManager::~HotkeyManager()
 {
     unregisterAll();
-#ifdef Q_OS_LINUX
-    if (m_display) {
-        qApp->removeNativeEventFilter(this);
-        XCloseDisplay(static_cast<Display *>(m_display));
-    }
-#endif
+    qApp->removeNativeEventFilter(this);
+}
+
+bool HotkeyManager::isPickerRegistered() const
+{
+    return m_pickerOk;
+}
+
+QSet<int> HotkeyManager::registeredItemIndices() const
+{
+    return m_itemOkIndices;
 }
 
 void HotkeyManager::setGlobalHotkey(const QKeySequence &seq)
 {
-    unregisterAll();
+    // Remove old picker registrations
+    QList<int> toRemove;
+    for (auto it = m_idToIndex.begin(); it != m_idToIndex.end(); ++it)
+        if (it.value() == -1) toRemove.append(it.key());
+
+#ifdef Q_OS_WIN
+    for (int id : toRemove) {
+        UnregisterHotKey(nullptr, id);
+        m_idToIndex.remove(id);
+    }
+#else
+    for (int id : toRemove)
+        m_idToIndex.remove(id);
+#endif
+
+    m_pickerOk = false;
+
     if (!seq.isEmpty())
-        registerKey(seq, -1);
+        m_pickerOk = registerKey(seq, -1);
+
+    emit registrationChanged();
 }
 
 void HotkeyManager::setItemHotkeys(const QList<PasteItem> &items)
 {
-    // Keep picker registration (index -1), remove item registrations
-    QList<HotkeyRegistration> pickerRegs;
-    for (auto &r : m_regs) {
-        if (r.itemIndex == -1) pickerRegs.append(r);
-    }
-
-#ifdef Q_OS_LINUX
-    Display *dpy = static_cast<Display *>(m_display);
-    if (dpy) {
-        for (auto &r : m_regs) {
-            if (r.itemIndex >= 0) {
-                XUngrabKey(dpy, r.keycode, r.modifiers, m_rootWindow);
-                // Also ungrab with NumLock (Mod2Mask) and CapsLock (LockMask)
-                XUngrabKey(dpy, r.keycode, r.modifiers | Mod2Mask, m_rootWindow);
-                XUngrabKey(dpy, r.keycode, r.modifiers | LockMask, m_rootWindow);
-                XUngrabKey(dpy, r.keycode, r.modifiers | Mod2Mask | LockMask, m_rootWindow);
-            }
-        }
-    }
-#endif
-    m_regs = pickerRegs;
+    unregisterItemHotkeys();
+    m_itemOkIndices.clear();
 
     for (int i = 0; i < items.size(); ++i) {
-        if (!items[i].hotkey.isEmpty())
-            registerKey(items[i].hotkey, i);
+        if (!items[i].hotkey.isEmpty()) {
+            if (registerKey(items[i].hotkey, i))
+                m_itemOkIndices.insert(i);
+        }
     }
+
+    emit registrationChanged();
+}
+
+void HotkeyManager::unregisterItemHotkeys()
+{
+    QList<int> toRemove;
+    for (auto it = m_idToIndex.begin(); it != m_idToIndex.end(); ++it)
+        if (it.value() >= 0) toRemove.append(it.key());
+
+#ifdef Q_OS_WIN
+    for (int id : toRemove) {
+        UnregisterHotKey(nullptr, id);
+        m_idToIndex.remove(id);
+    }
+#else
+    for (int id : toRemove)
+        m_idToIndex.remove(id);
+#endif
+
+    m_itemOkIndices.clear();
 }
 
 void HotkeyManager::unregisterAll()
 {
-#ifdef Q_OS_LINUX
-    Display *dpy = static_cast<Display *>(m_display);
-    if (dpy) {
-        for (auto &r : m_regs) {
-            XUngrabKey(dpy, r.keycode, r.modifiers, m_rootWindow);
-            XUngrabKey(dpy, r.keycode, r.modifiers | Mod2Mask, m_rootWindow);
-            XUngrabKey(dpy, r.keycode, r.modifiers | LockMask, m_rootWindow);
-            XUngrabKey(dpy, r.keycode, r.modifiers | Mod2Mask | LockMask, m_rootWindow);
-        }
-    }
+#ifdef Q_OS_WIN
+    for (int id : m_idToIndex.keys())
+        UnregisterHotKey(nullptr, id);
 #endif
-    m_regs.clear();
+    m_idToIndex.clear();
+    m_pickerOk = false;
+    m_itemOkIndices.clear();
 }
 
-void HotkeyManager::registerKey(const QKeySequence &seq, int itemIndex)
+bool HotkeyManager::registerKey(const QKeySequence &seq, int itemIndex)
 {
-    if (seq.isEmpty()) return;
+    if (seq.isEmpty()) return false;
 
-#ifdef Q_OS_LINUX
-    Display *dpy = static_cast<Display *>(m_display);
-    if (!dpy) return;
+#ifdef Q_OS_WIN
+    Qt::Key key;
+    Qt::KeyboardModifiers mods;
+    if (!decodeSequence(seq, key, mods)) return false;
 
-    // Qt6: seq[0] is Qt::Key combo; Qt5: seq[0] is int
-#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    Qt::Key key = seq[0].key();
-    Qt::KeyboardModifiers mods = seq[0].keyboardModifiers();
-#else
-    int combo = seq[0];
-    Qt::Key key = static_cast<Qt::Key>(combo & ~Qt::KeyboardModifierMask);
-    Qt::KeyboardModifiers mods = static_cast<Qt::KeyboardModifiers>(combo & Qt::KeyboardModifierMask);
-#endif
+    UINT vk    = qtKeyToVK(key);
+    UINT wmods = qtModsToWin(mods);
 
-    KeySym sym = qtKeyToKeySym(static_cast<int>(key));
-    if (sym == 0) {
+    if (vk == 0) {
         qWarning() << "HotkeyManager: cannot map key" << key;
-        return;
+        return false;
     }
 
-    KeyCode kc = XKeysymToKeycode(dpy, sym);
-    unsigned xmods = qtModsToX11(mods);
+    int id = m_nextId++;
+    if (!RegisterHotKey(nullptr, id, wmods | MOD_NOREPEAT, vk)) {
+        qWarning() << "HotkeyManager: RegisterHotKey failed for"
+                   << seq.toString() << "error:" << GetLastError();
+        return false;
+    }
 
-    // Grab with common lock-key combinations
-    unsigned lockVariants[] = {0, Mod2Mask, LockMask, Mod2Mask | LockMask};
-    for (unsigned lv : lockVariants)
-        XGrabKey(dpy, kc, xmods | lv, m_rootWindow, True, GrabModeAsync, GrabModeAsync);
-
-    HotkeyRegistration reg;
-    reg.keycode   = kc;
-    reg.modifiers = xmods;
-    reg.itemIndex = itemIndex;
-    m_regs.append(reg);
+    m_idToIndex[id] = itemIndex;
+    return true;
 #else
     Q_UNUSED(seq); Q_UNUSED(itemIndex);
+    return false;
 #endif
 }
 
-bool HotkeyManager::nativeEventFilter(const QByteArray &eventType, void *message, qintptr * /*result*/)
+bool HotkeyManager::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result)
 {
-#ifdef Q_OS_LINUX
-    if (eventType != "xcb_generic_event_t") return false;
+    Q_UNUSED(result);
 
-    // We receive raw XEvent through Qt's XCB connection
-    // Qt on X11 wraps xcb events; we can also use XNextEvent approach but
-    // it's simpler to check via xcb structure. Use XEvent cast via XCB.
-    // Actually with Qt6/xcb we get xcb_generic_event_t*; use response_type.
-    auto *ev = static_cast<xcb_generic_event_t *>(message);
-    if (!ev) return false;
+#ifdef Q_OS_WIN
+    if (eventType != "windows_generic_MSG" && eventType != "windows_dispatcher_MSG")
+        return false;
 
-    // XCB key press event type = 2
-    if ((ev->response_type & ~0x80) != 2 /*XCB_KEY_PRESS*/) return false;
+    MSG *msg = static_cast<MSG *>(message);
+    if (!msg || msg->message != WM_HOTKEY)
+        return false;
 
-    auto *kev = reinterpret_cast<xcb_key_press_event_t *>(ev);
-    unsigned mods = kev->state & ~(Mod2Mask | LockMask); // strip numlock/capslock
+    int id = static_cast<int>(msg->wParam);
+    auto it = m_idToIndex.find(id);
+    if (it == m_idToIndex.end()) return false;
 
-    for (auto &r : m_regs) {
-        if (r.keycode == kev->detail && r.modifiers == mods) {
-            if (r.itemIndex == -1)
-                emit pickerRequested();
-            else
-                emit itemTriggered(r.itemIndex);
-            return true; // consumed
-        }
-    }
+    if (it.value() == -1)
+        emit pickerRequested();
+    else
+        emit itemTriggered(it.value());
+
+    return true;
 #else
     Q_UNUSED(eventType); Q_UNUSED(message);
-#endif
     return false;
+#endif
 }

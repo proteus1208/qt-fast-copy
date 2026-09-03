@@ -4,6 +4,7 @@
 #include <QKeySequence>
 
 struct PasteItem {
-    QString text;        // multi-line text (contains real newlines)
+    QString      title;  // display name shown in picker menu and settings list
+    QString      text;   // multi-line paste text (contains real newlines)
     QKeySequence hotkey; // optional per-item global hotkey
 };
