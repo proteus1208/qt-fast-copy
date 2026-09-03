@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>SettingsWindow</class>
+ <widget class="QMainWindow" name="SettingsWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>520</width>
+    <height>600</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Fast Paste — Settings</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout">
+    <item>
+     <widget class="QGroupBox" name="groupBoxGlobal">
+      <property name="title">
+       <string>Global Hotkey</string>
+      </property>
+      <layout class="QHBoxLayout" name="hboxGlobal">
+       <item>
+        <widget class="QLabel" name="labelGlobalHotkey">
+         <property name="text">
+          <string>Open picker:</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QKeySequenceEdit" name="keySeqEdit">
+         <property name="toolTip">
+          <string>Press a key combination to set the global picker hotkey</string>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="labelItems">
+      <property name="text">
+       <string>Paste Items:</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QScrollArea" name="scrollArea">
+      <property name="widgetResizable">
+       <bool>true</bool>
+      </property>
+      <property name="horizontalScrollBarPolicy">
+       <enum>Qt::ScrollBarAlwaysOff</enum>
+      </property>
+      <widget class="QWidget" name="scrollAreaWidgetContents">
+       <layout class="QVBoxLayout" name="itemsLayout">
+        <property name="alignment">
+         <set>Qt::AlignTop</set>
+        </property>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+    <item>
+     <widget class="QPushButton" name="btnAddItem">
+      <property name="text">
+       <string>+ Add Item</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>QKeySequenceEdit</class>
+   <extends>QWidget</extends>
+   <header>QKeySequenceEdit</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
