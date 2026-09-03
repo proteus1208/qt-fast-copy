@@ -32,10 +32,10 @@ TrayIcon::TrayIcon(QObject *parent)
 
     // --- Tray menu ---
     m_trayMenu = new QMenu();
-    QAction *actSettings = m_trayMenu->addAction("⚙  Settings…");
-    QAction *actAbout    = m_trayMenu->addAction("ℹ  About");
+    QAction *actSettings = m_trayMenu->addAction("Settings");
+    QAction *actAbout    = m_trayMenu->addAction("About");
     m_trayMenu->addSeparator();
-    QAction *actQuit = m_trayMenu->addAction("✕  Quit");
+    QAction *actQuit = m_trayMenu->addAction("Quit");
 
     connect(actSettings, &QAction::triggered, this, &TrayIcon::onSettingsTriggered);
     connect(actAbout,    &QAction::triggered, this, &TrayIcon::onAboutTriggered);

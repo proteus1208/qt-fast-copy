@@ -6,99 +6,108 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>580</width>
-    <height>660</height>
+    <width>620</width>
+    <height>700</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>Fast Paste - Settings</string>
+   <string>Settings</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
     <property name="spacing">
-     <number>8</number>
+     <number>20</number>
     </property>
     <property name="leftMargin">
-     <number>12</number>
+     <number>28</number>
     </property>
     <property name="topMargin">
-     <number>12</number>
+     <number>24</number>
     </property>
     <property name="rightMargin">
-     <number>12</number>
+     <number>28</number>
     </property>
     <property name="bottomMargin">
-     <number>12</number>
+     <number>24</number>
     </property>
     <item>
-     <widget class="QGroupBox" name="groupBoxGlobal">
-      <property name="title">
-       <string>Global Picker Hotkey</string>
+     <widget class="QLabel" name="labelPageTitle">
+      <property name="text">
+       <string>Settings</string>
       </property>
-      <layout class="QHBoxLayout" name="hboxGlobal">
-       <property name="leftMargin">
-        <number>10</number>
-       </property>
-       <property name="topMargin">
-        <number>8</number>
-       </property>
-       <property name="rightMargin">
-        <number>10</number>
-       </property>
-       <property name="bottomMargin">
-        <number>8</number>
-       </property>
-       <item>
-        <widget class="QLabel" name="labelGlobalHotkey">
-         <property name="text">
-          <string>Hotkey to open picker:</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QKeySequenceEdit" name="keySeqEdit">
-         <property name="toolTip">
-          <string>Click here, then press your desired key combination.</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QPushButton" name="btnClearGlobal">
-         <property name="maximumWidth">
-          <number>60</number>
-         </property>
-         <property name="text">
-          <string>Clear</string>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="labelGlobalStatus">
-         <property name="visible">
-          <bool>false</bool>
-         </property>
-         <property name="minimumWidth">
-          <number>70</number>
-         </property>
-         <property name="text">
-          <string/>
-         </property>
-        </widget>
-       </item>
-      </layout>
      </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="labelPageSubtitle">
+      <property name="text">
+       <string>Configure the picker shortcut and your paste items.</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="labelGlobalTitle">
+      <property name="text">
+       <string>Picker shortcut</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="labelGlobalHint">
+      <property name="text">
+       <string>Opens the paste menu from any app.</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="hboxGlobal">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QKeySequenceEdit" name="keySeqEdit">
+        <property name="toolTip">
+         <string>Click, then press a key combination.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnClearGlobal">
+        <property name="text">
+         <string>Clear</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelGlobalStatus">
+        <property name="visible">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacerHotkey">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
     </item>
     <item>
      <layout class="QHBoxLayout" name="hboxItemsHeader">
       <item>
        <widget class="QLabel" name="labelItems">
-        <property name="font">
-         <font>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="text">
-         <string>Paste Items</string>
+         <string>Items</string>
         </property>
        </widget>
       </item>
@@ -117,11 +126,8 @@
       </item>
       <item>
        <widget class="QLabel" name="labelHint">
-        <property name="styleSheet">
-         <string notr="true">font-size: 11px; color: gray;</string>
-        </property>
         <property name="text">
-         <string>Green dot = active, red dot = failed</string>
+         <string>Active or failed shows next to each shortcut</string>
         </property>
        </widget>
       </item>
@@ -130,7 +136,7 @@
     <item>
      <widget class="QScrollArea" name="scrollArea">
       <property name="frameShape">
-       <enum>QFrame::StyledPanel</enum>
+       <enum>QFrame::NoFrame</enum>
       </property>
       <property name="horizontalScrollBarPolicy">
        <enum>Qt::ScrollBarAlwaysOff</enum>
@@ -141,19 +147,19 @@
       <widget class="QWidget" name="scrollAreaWidgetContents">
        <layout class="QVBoxLayout" name="itemsLayout">
         <property name="spacing">
-         <number>3</number>
+         <number>8</number>
         </property>
         <property name="leftMargin">
-         <number>4</number>
+         <number>0</number>
         </property>
         <property name="topMargin">
-         <number>4</number>
+         <number>0</number>
         </property>
         <property name="rightMargin">
-         <number>4</number>
+         <number>0</number>
         </property>
         <property name="bottomMargin">
-         <number>4</number>
+         <number>0</number>
         </property>
         <property name="alignment">
          <set>Qt::AlignTop</set>
@@ -163,31 +169,11 @@
      </widget>
     </item>
     <item>
-     <layout class="QHBoxLayout" name="hboxAddItem">
-      <item>
-       <widget class="QPushButton" name="btnAddItem">
-        <property name="minimumHeight">
-         <number>32</number>
-        </property>
-        <property name="text">
-         <string>+ Add Item</string>
-        </property>
-       </widget>
-      </item>
-      <item>
-       <spacer name="horizontalSpacerBottom">
-        <property name="orientation">
-         <enum>Qt::Horizontal</enum>
-        </property>
-        <property name="sizeHint" stdset="0">
-         <size>
-          <width>40</width>
-          <height>20</height>
-         </size>
-        </property>
-       </spacer>
-      </item>
-     </layout>
+     <widget class="QPushButton" name="btnAddItem">
+      <property name="text">
+       <string>Add item</string>
+      </property>
+     </widget>
     </item>
    </layout>
   </widget>

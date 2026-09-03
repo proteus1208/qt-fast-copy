@@ -26,6 +26,7 @@ set(PROJECT_SOURCES
     settingswindow.ui
     itemeditordiag.h
     itemeditordiag.cpp
+    appstyle.h
     resources.qrc
 )
 

@@ -1,27 +1,37 @@
 #include "settingswindow.h"
 #include "ui_settingswindow.h"
 #include "itemeditordiag.h"
+#include "appstyle.h"
 
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
-#include <QFrame>
 #include <QFontMetrics>
+#include <QStyle>
 
 SettingsWindow::SettingsWindow(QWidget *parent)
     : QMainWindow(parent)
     , ui(new Ui::SettingsWindow)
 {
     ui->setupUi(this);
+    setStyleSheet(appStyleSheet());
+
+    ui->labelPageTitle->setObjectName("labelPageTitle");
+    ui->labelPageSubtitle->setObjectName("labelPageSubtitle");
+    ui->labelGlobalTitle->setObjectName("labelGlobalTitle");
+    ui->labelGlobalHint->setObjectName("labelGlobalHint");
+    ui->labelItems->setObjectName("labelItems");
+    ui->labelHint->setObjectName("labelHint");
+    ui->btnAddItem->setObjectName("btnAddItem");
+    ui->btnClearGlobal->setObjectName("btnClearGlobal");
+    ui->scrollArea->setWidgetResizable(true);
 
     m_listContainer = ui->scrollAreaWidgetContents;
     m_listLayout    = qobject_cast<QVBoxLayout *>(m_listContainer->layout());
     m_listLayout->setAlignment(Qt::AlignTop);
 
-    connect(ui->btnAddItem,    &QPushButton::clicked,
-            this, &SettingsWindow::onAddItem);
-    connect(ui->btnClearGlobal, &QPushButton::clicked,
-            ui->keySeqEdit, &QKeySequenceEdit::clear);
+    connect(ui->btnAddItem, &QPushButton::clicked, this, &SettingsWindow::onAddItem);
+    connect(ui->btnClearGlobal, &QPushButton::clicked, ui->keySeqEdit, &QKeySequenceEdit::clear);
     connect(ui->keySeqEdit, &QKeySequenceEdit::keySequenceChanged,
             this, &SettingsWindow::onGlobalHotkeyChanged);
 }
@@ -54,159 +64,103 @@ void SettingsWindow::setData(const QList<PasteItem> &items, const QKeySequence &
     rebuildList();
 }
 
-// ── Helper: small colored status dot ──────────────────────────────────────────
-static QLabel *makeStatusDot(QWidget *parent, bool ok, const QString &tip)
-{
-    QLabel *dot = new QLabel(ok ? "●" : "●", parent);
-    dot->setFixedSize(16, 16);
-    dot->setAlignment(Qt::AlignCenter);
-    dot->setToolTip(tip);
-    if (ok) {
-        dot->setStyleSheet("color: #27ae60; font-size: 14px;"); // green
-    } else {
-        dot->setStyleSheet("color: #e74c3c; font-size: 14px;"); // red
-    }
-    return dot;
-}
-
 void SettingsWindow::rebuildList()
 {
-    // Remove all existing rows
     QLayoutItem *child;
     while ((child = m_listLayout->takeAt(0)) != nullptr) {
-        if (child->widget()) child->widget()->deleteLater();
+        if (child->widget())
+            child->widget()->deleteLater();
         delete child;
     }
 
-    // Get current registration state
-    bool      pickerOk   = m_hotkeyMgr ? m_hotkeyMgr->isPickerRegistered() : false;
-    QSet<int> itemOkSet  = m_hotkeyMgr ? m_hotkeyMgr->registeredItemIndices() : QSet<int>{};
+    const bool pickerOk = m_hotkeyMgr ? m_hotkeyMgr->isPickerRegistered() : false;
+    const QSet<int> itemOkSet = m_hotkeyMgr ? m_hotkeyMgr->registeredItemIndices() : QSet<int>{};
 
-    // Update global hotkey status label
     if (!m_globalHotkey.isEmpty()) {
         ui->labelGlobalStatus->setVisible(true);
-        if (pickerOk) {
-            ui->labelGlobalStatus->setText("● Active");
-            ui->labelGlobalStatus->setStyleSheet("color: #27ae60; font-weight: bold;");
-            ui->labelGlobalStatus->setToolTip("Global picker hotkey registered successfully.");
-        } else {
-            ui->labelGlobalStatus->setText("● Failed");
-            ui->labelGlobalStatus->setStyleSheet("color: #e74c3c; font-weight: bold;");
-            ui->labelGlobalStatus->setToolTip(
-                "Failed to register the hotkey — it may already be in use by another app.");
-        }
+        ui->labelGlobalStatus->setObjectName(pickerOk ? "statusOk" : "statusFail");
+        ui->labelGlobalStatus->setText(pickerOk ? "Active" : "Failed");
+        ui->labelGlobalStatus->setToolTip(pickerOk
+            ? "Picker shortcut is registered."
+            : "Could not register this shortcut. It may already be in use.");
+        ui->labelGlobalStatus->style()->unpolish(ui->labelGlobalStatus);
+        ui->labelGlobalStatus->style()->polish(ui->labelGlobalStatus);
     } else {
         ui->labelGlobalStatus->setVisible(false);
     }
 
-    // Build item rows
     for (int i = 0; i < m_items.size(); ++i) {
         const PasteItem &item = m_items[i];
 
-        QFrame *row = new QFrame(m_listContainer);
-        row->setFrameShape(QFrame::StyledPanel);
-        row->setStyleSheet("QFrame { background: palette(base); border-radius: 4px; }");
+        auto *row = new QWidget(m_listContainer);
+        row->setObjectName("itemCard");
+        row->setMinimumHeight(64);
 
-        QHBoxLayout *hl = new QHBoxLayout(row);
-        hl->setContentsMargins(8, 5, 8, 5);
-        hl->setSpacing(6);
+        auto *hl = new QHBoxLayout(row);
+        hl->setContentsMargins(16, 12, 12, 12);
+        hl->setSpacing(12);
 
-        // ── Index badge ───────────────────────────────────────────────────
-        QLabel *numLabel = new QLabel(QString::number(i + 1), row);
+        auto *numLabel = new QLabel(QString::number(i + 1), row);
+        numLabel->setObjectName("itemIndex");
         numLabel->setFixedSize(22, 22);
         numLabel->setAlignment(Qt::AlignCenter);
-        numLabel->setStyleSheet(
-            "background: #0078d4; color: white; border-radius: 11px;"
-            "font-weight: bold; font-size: 11px;");
         hl->addWidget(numLabel);
 
-        // ── Title + text preview (stacked vertically) ─────────────────────
-        QWidget *textBlock = new QWidget(row);
-        QVBoxLayout *vl = new QVBoxLayout(textBlock);
+        auto *textBlock = new QWidget(row);
+        auto *vl = new QVBoxLayout(textBlock);
         vl->setContentsMargins(0, 0, 0, 0);
-        vl->setSpacing(1);
+        vl->setSpacing(2);
 
-        // Title label (bold)
-        QString titleText = item.title.trimmed().isEmpty()
-                            ? QString("(item %1)").arg(i + 1)
-                            : item.title;
-        QLabel *titleLabel = new QLabel(titleText, textBlock);
-        titleLabel->setStyleSheet("font-weight: bold; font-size: 12px;");
+        const QString titleText = item.title.trimmed().isEmpty()
+            ? QString("Untitled item %1").arg(i + 1)
+            : item.title;
+        auto *titleLabel = new QLabel(titleText, textBlock);
+        titleLabel->setObjectName("itemTitle");
         titleLabel->setTextFormat(Qt::PlainText);
         vl->addWidget(titleLabel);
 
-        // Text preview (gray, single line)
         QString preview = item.text;
-        preview.replace('\n', ' ');
-        QFontMetrics fm(titleLabel->font());
-        QString elided = fm.elidedText(preview, Qt::ElideRight, 300);
-        if (!elided.isEmpty()) {
-            QLabel *previewLabel = new QLabel(elided, textBlock);
-            previewLabel->setStyleSheet("color: gray; font-size: 11px;");
+        preview.replace(QLatin1Char('\n'), QLatin1Char(' '));
+        const QString elided = QFontMetrics(titleLabel->font()).elidedText(preview, Qt::ElideRight, 320);
+        if (!elided.trimmed().isEmpty()) {
+            auto *previewLabel = new QLabel(elided, textBlock);
+            previewLabel->setObjectName("itemPreview");
             previewLabel->setTextFormat(Qt::PlainText);
             vl->addWidget(previewLabel);
         }
-
         hl->addWidget(textBlock, 1);
 
-        // ── Hotkey badge + status dot ─────────────────────────────────────
         if (!item.hotkey.isEmpty()) {
-            bool hkOk = itemOkSet.contains(i);
-
-            // Dot indicator
-            QString tip = hkOk
-                ? QString("Hotkey %1 registered OK").arg(item.hotkey.toString())
-                : QString("Hotkey %1 FAILED — already in use or unsupported")
-                          .arg(item.hotkey.toString());
-            QLabel *dot = makeStatusDot(row, hkOk, tip);
-            hl->addWidget(dot);
-
-            // Hotkey text badge
-            QLabel *hkLabel = new QLabel(
-                QString("  %1  ").arg(item.hotkey.toString()), row);
-            hkLabel->setStyleSheet(
-                hkOk
-                ? "color: #1a7a1a; background: #d4edda; border: 1px solid #b0d9b8;"
-                  "border-radius: 3px; font-size: 10px; padding: 1px 4px;"
-                : "color: #7a1a1a; background: #fde8e8; border: 1px solid #e0b0b0;"
-                  "border-radius: 3px; font-size: 10px; padding: 1px 4px;");
-            hkLabel->setToolTip(tip);
-            hl->addWidget(hkLabel);
+            const bool hkOk = itemOkSet.contains(i);
+            auto *status = new QLabel(hkOk ? item.hotkey.toString() + "  Active"
+                                           : item.hotkey.toString() + "  Failed", row);
+            status->setObjectName(hkOk ? "statusOk" : "statusFail");
+            status->setToolTip(hkOk
+                ? "Global shortcut is registered."
+                : "Could not register this shortcut.");
+            hl->addWidget(status);
         }
 
-        // ── Separator ─────────────────────────────────────────────────────
-        QFrame *sep = new QFrame(row);
-        sep->setFrameShape(QFrame::VLine);
-        sep->setStyleSheet("color: #ccc;");
-        hl->addWidget(sep);
-
-        // ── Action buttons ────────────────────────────────────────────────
-        auto makeIconBtn = [&](const QString &text, const QString &tip) {
-            QPushButton *b = new QPushButton(text, row);
-            b->setFixedSize(26, 26);
+        auto makeGhost = [&](const QString &text, const QString &tip, const char *name) {
+            auto *b = new QPushButton(text, row);
+            b->setObjectName(name);
             b->setToolTip(tip);
-            b->setStyleSheet(
-                "QPushButton { border: none; border-radius: 4px; }"
-                "QPushButton:hover { background: #e0e0e0; }");
+            b->setCursor(Qt::PointingHandCursor);
+            b->setFixedHeight(32);
             return b;
         };
 
-        QPushButton *btnUp   = makeIconBtn("▲", "Move up");
-        QPushButton *btnDown = makeIconBtn("▼", "Move down");
-        QPushButton *btnEdit = new QPushButton("Edit", row);
-        btnEdit->setFixedHeight(26);
-        btnEdit->setToolTip("Edit title, text and hotkey");
-        QPushButton *btnDel  = makeIconBtn("✕", "Remove item");
-        btnDel->setStyleSheet(
-            "QPushButton { border: none; border-radius: 4px; color: #c0392b; }"
-            "QPushButton:hover { background: #fde8e8; }");
+        auto *btnUp   = makeGhost("Up", "Move up", "btnGhost");
+        auto *btnDown = makeGhost("Down", "Move down", "btnGhost");
+        auto *btnEdit = makeGhost("Edit", "Edit item", "btnGhost");
+        auto *btnDel  = makeGhost("Remove", "Remove item", "btnDanger");
 
         hl->addWidget(btnUp);
         hl->addWidget(btnDown);
         hl->addWidget(btnEdit);
         hl->addWidget(btnDel);
 
-        int idx = i;
+        const int idx = i;
         connect(btnUp,   &QPushButton::clicked, this, [this, idx]{ onMoveUp(idx); });
         connect(btnDown, &QPushButton::clicked, this, [this, idx]{ onMoveDown(idx); });
         connect(btnEdit, &QPushButton::clicked, this, [this, idx]{ onEditItem(idx); });
@@ -216,10 +170,10 @@ void SettingsWindow::rebuildList()
     }
 
     if (m_items.isEmpty()) {
-        QLabel *empty = new QLabel(
-            "No items yet. Click \"＋ Add Item\" to get started.", m_listContainer);
+        auto *empty = new QLabel("No items yet. Add one to start pasting instantly.", m_listContainer);
+        empty->setObjectName("labelPageSubtitle");
         empty->setAlignment(Qt::AlignCenter);
-        empty->setStyleSheet("color: gray; padding: 20px;");
+        empty->setMinimumHeight(80);
         m_listLayout->addWidget(empty);
     }
 }

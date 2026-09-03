@@ -1,4 +1,5 @@
 #include "itemeditordiag.h"
+#include "appstyle.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -6,89 +7,84 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QKeySequenceEdit>
-#include <QDialogButtonBox>
 #include <QPushButton>
-#include <QGroupBox>
-#include <QFormLayout>
 
 ItemEditorDialog::ItemEditorDialog(const PasteItem &item, QWidget *parent)
     : QDialog(parent)
 {
-    setWindowTitle("Edit Paste Item");
-    setMinimumWidth(460);
-    setMinimumHeight(360);
+    setWindowTitle("Edit item");
+    setMinimumSize(480, 420);
+    setModal(true);
+    setStyleSheet(appStyleSheet());
 
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setSpacing(10);
-    mainLayout->setContentsMargins(14, 14, 14, 14);
+    mainLayout->setSpacing(16);
+    mainLayout->setContentsMargins(28, 24, 28, 24);
 
-    // ── Title + Text section ──────────────────────────────────────────────
-    auto *textGroup  = new QGroupBox("Item", this);
-    auto *formLayout = new QFormLayout(textGroup);
-    formLayout->setRowWrapPolicy(QFormLayout::DontWrapRows);
-    formLayout->setLabelAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    formLayout->setContentsMargins(10, 10, 10, 10);
-    formLayout->setSpacing(8);
+    auto *title = new QLabel("Edit item", this);
+    title->setObjectName("dialogTitle");
+    auto *subtitle = new QLabel("Title appears in the picker. Text is what gets pasted.", this);
+    subtitle->setObjectName("dialogSubtitle");
+    subtitle->setWordWrap(true);
+    mainLayout->addWidget(title);
+    mainLayout->addWidget(subtitle);
 
-    // Title field
-    m_titleEdit = new QLineEdit(textGroup);
-    m_titleEdit->setPlaceholderText("Short name shown in picker menu (e.g. \"Greeting\")");
+    auto *titleLabel = new QLabel("Title", this);
+    titleLabel->setObjectName("fieldLabel");
+    m_titleEdit = new QLineEdit(this);
+    m_titleEdit->setPlaceholderText("Shown in the picker menu");
     m_titleEdit->setText(item.title);
     m_titleEdit->setMaxLength(80);
-    formLayout->addRow("Title:", m_titleEdit);
+    mainLayout->addWidget(titleLabel);
+    mainLayout->addWidget(m_titleEdit);
 
-    // Text field
-    m_textEdit = new QPlainTextEdit(textGroup);
-    m_textEdit->setPlaceholderText("Paste text — press Enter for new lines…");
+    auto *textLabel = new QLabel("Text", this);
+    textLabel->setObjectName("fieldLabel");
+    m_textEdit = new QPlainTextEdit(this);
+    m_textEdit->setPlaceholderText("Paste content. Use Enter for new lines.");
     m_textEdit->setPlainText(item.text);
     m_textEdit->setMinimumHeight(140);
     m_textEdit->setTabChangesFocus(true);
-    auto *textHint = new QLabel(
-        "Tip: text can span multiple lines. The title is what appears in the picker menu.", textGroup);
-    textHint->setStyleSheet("color: gray; font-size: 11px;");
+    auto *textHint = new QLabel("This is pasted into the focused field.", this);
+    textHint->setObjectName("fieldHint");
     textHint->setWordWrap(true);
-    formLayout->addRow("Text:", m_textEdit);
-    formLayout->addRow("", textHint);
+    mainLayout->addWidget(textLabel);
+    mainLayout->addWidget(m_textEdit, 1);
+    mainLayout->addWidget(textHint);
 
-    mainLayout->addWidget(textGroup);
-
-    // ── Hotkey section ────────────────────────────────────────────────────
-    auto *hkGroup  = new QGroupBox("Global hotkey for this item (optional)", this);
-    auto *hkOuter  = new QVBoxLayout(hkGroup);
-    hkOuter->setContentsMargins(10, 8, 10, 8);
-
-    auto *hkHint = new QLabel(
-        "Works anywhere in Windows. You do not need to open Settings or the picker. "
-        "Press the shortcut in any app to copy this text and paste it into the focused field.",
-        hkGroup);
+    auto *hkLabel = new QLabel("Global shortcut", this);
+    hkLabel->setObjectName("fieldLabel");
+    auto *hkHint = new QLabel("Optional. Works in any app without opening this window.", this);
+    hkHint->setObjectName("fieldHint");
     hkHint->setWordWrap(true);
-    hkHint->setStyleSheet("color: gray; font-size: 11px;");
-    hkOuter->addWidget(hkHint);
 
-    auto *hkLayout = new QHBoxLayout;
-    auto *hkLabel  = new QLabel("Shortcut:", hkGroup);
-    m_hotkeyEdit = new QKeySequenceEdit(hkGroup);
+    auto *hkRow = new QHBoxLayout;
+    hkRow->setSpacing(10);
+    m_hotkeyEdit = new QKeySequenceEdit(this);
     m_hotkeyEdit->setKeySequence(item.hotkey);
     m_hotkeyEdit->setMaximumSequenceLength(1);
-    m_hotkeyEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    m_hotkeyEdit->setToolTip("Click here and press a key combination. It is registered as a system-wide hotkey.");
-
-    auto *clearBtn = new QPushButton("Clear", hkGroup);
-    clearBtn->setFixedWidth(55);
+    auto *clearBtn = new QPushButton("Clear", this);
+    clearBtn->setObjectName("btnClearGlobal");
     connect(clearBtn, &QPushButton::clicked, m_hotkeyEdit, &QKeySequenceEdit::clear);
+    hkRow->addWidget(m_hotkeyEdit, 1);
+    hkRow->addWidget(clearBtn);
 
-    hkLayout->addWidget(hkLabel);
-    hkLayout->addWidget(m_hotkeyEdit, 1);
-    hkLayout->addWidget(clearBtn);
-    hkOuter->addLayout(hkLayout);
-    mainLayout->addWidget(hkGroup);
+    mainLayout->addWidget(hkLabel);
+    mainLayout->addWidget(hkHint);
+    mainLayout->addLayout(hkRow);
 
-    // ── Buttons ───────────────────────────────────────────────────────────
-    auto *buttons = new QDialogButtonBox(
-        QDialogButtonBox::Ok | QDialogButtonBox::Cancel, this);
-    connect(buttons, &QDialogButtonBox::accepted, this, &QDialog::accept);
-    connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
-    mainLayout->addWidget(buttons);
+    auto *actions = new QHBoxLayout;
+    actions->addStretch();
+    auto *cancelBtn = new QPushButton("Cancel", this);
+    cancelBtn->setObjectName("btnCancel");
+    auto *saveBtn = new QPushButton("Save", this);
+    saveBtn->setObjectName("btnSave");
+    saveBtn->setDefault(true);
+    connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
+    connect(saveBtn, &QPushButton::clicked, this, &QDialog::accept);
+    actions->addWidget(cancelBtn);
+    actions->addWidget(saveBtn);
+    mainLayout->addLayout(actions);
 
     m_titleEdit->setFocus();
 }
