@@ -35,6 +35,7 @@ ItemEditorDialog::ItemEditorDialog(const PasteItem &item, QWidget *parent)
     m_titleEdit->setPlaceholderText("Shown in the picker menu");
     m_titleEdit->setText(item.title);
     m_titleEdit->setMaxLength(80);
+    forceBlackInputText(m_titleEdit);
     mainLayout->addWidget(titleLabel);
     mainLayout->addWidget(m_titleEdit);
 
@@ -45,6 +46,7 @@ ItemEditorDialog::ItemEditorDialog(const PasteItem &item, QWidget *parent)
     m_textEdit->setPlainText(item.text);
     m_textEdit->setMinimumHeight(110);
     m_textEdit->setTabChangesFocus(true);
+    forceBlackInputText(m_textEdit);
     auto *textHint = new QLabel("This is pasted into the focused field.", this);
     textHint->setObjectName("fieldHint");
     textHint->setWordWrap(true);
@@ -63,6 +65,9 @@ ItemEditorDialog::ItemEditorDialog(const PasteItem &item, QWidget *parent)
     m_hotkeyEdit = new QKeySequenceEdit(this);
     m_hotkeyEdit->setKeySequence(item.hotkey);
     m_hotkeyEdit->setMaximumSequenceLength(1);
+    forceBlackInputText(m_hotkeyEdit);
+    if (auto *inner = m_hotkeyEdit->findChild<QLineEdit *>())
+        forceBlackInputText(inner);
     auto *clearBtn = new QPushButton("Clear", this);
     clearBtn->setObjectName("btnClearGlobal");
     connect(clearBtn, &QPushButton::clicked, m_hotkeyEdit, &QKeySequenceEdit::clear);

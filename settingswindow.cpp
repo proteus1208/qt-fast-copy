@@ -5,9 +5,52 @@
 
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
-#include <QFontMetrics>
+#include <QResizeEvent>
+#include <QSizePolicy>
 #include <QStyle>
+#include <QIcon>
+#include <QKeySequenceEdit>
+
+namespace {
+
+class ElidedLabel : public QLabel
+{
+public:
+    explicit ElidedLabel(QWidget *parent = nullptr) : QLabel(parent)
+    {
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        setMinimumWidth(0);
+        setWordWrap(false);
+        setTextFormat(Qt::PlainText);
+    }
+
+    void setFullText(const QString &text)
+    {
+        m_fullText = text;
+        setToolTip(text);
+        updateElide();
+    }
+
+protected:
+    void resizeEvent(QResizeEvent *event) override
+    {
+        QLabel::resizeEvent(event);
+        updateElide();
+    }
+
+private:
+    void updateElide()
+    {
+        const int w = qMax(0, width());
+        setText(fontMetrics().elidedText(m_fullText, Qt::ElideRight, w));
+    }
+
+    QString m_fullText;
+};
+
+} // namespace
 
 SettingsWindow::SettingsWindow(QWidget *parent)
     : QMainWindow(parent)
@@ -25,6 +68,10 @@ SettingsWindow::SettingsWindow(QWidget *parent)
     ui->btnAddItem->setObjectName("btnAddItem");
     ui->btnClearGlobal->setObjectName("btnClearGlobal");
     ui->scrollArea->setWidgetResizable(true);
+
+    forceBlackInputText(ui->keySeqEdit);
+    if (auto *inner = ui->keySeqEdit->findChild<QLineEdit *>())
+        forceBlackInputText(inner);
 
     m_listContainer = ui->scrollAreaWidgetContents;
     m_listLayout    = qobject_cast<QVBoxLayout *>(m_listContainer->layout());
@@ -106,6 +153,8 @@ void SettingsWindow::rebuildList()
         hl->addWidget(numLabel);
 
         auto *textBlock = new QWidget(row);
+        textBlock->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+        textBlock->setMinimumWidth(0);
         auto *vl = new QVBoxLayout(textBlock);
         vl->setContentsMargins(0, 0, 0, 0);
         vl->setSpacing(2);
@@ -113,18 +162,18 @@ void SettingsWindow::rebuildList()
         const QString titleText = item.title.trimmed().isEmpty()
             ? QString("Untitled item %1").arg(i + 1)
             : item.title;
-        auto *titleLabel = new QLabel(titleText, textBlock);
+        auto *titleLabel = new ElidedLabel(textBlock);
         titleLabel->setObjectName("itemTitle");
-        titleLabel->setTextFormat(Qt::PlainText);
+        titleLabel->setFullText(titleText);
         vl->addWidget(titleLabel);
 
-        QString preview = item.text;
+        QString preview = item.text.trimmed();
         preview.replace(QLatin1Char('\n'), QLatin1Char(' '));
-        const QString elided = QFontMetrics(titleLabel->font()).elidedText(preview, Qt::ElideRight, 320);
-        if (!elided.trimmed().isEmpty()) {
-            auto *previewLabel = new QLabel(elided, textBlock);
+        preview = preview.simplified();
+        if (!preview.isEmpty()) {
+            auto *previewLabel = new ElidedLabel(textBlock);
             previewLabel->setObjectName("itemPreview");
-            previewLabel->setTextFormat(Qt::PlainText);
+            previewLabel->setFullText(preview);
             vl->addWidget(previewLabel);
         }
         hl->addWidget(textBlock, 1);
@@ -137,22 +186,33 @@ void SettingsWindow::rebuildList()
             status->setToolTip(hkOk
                 ? "Global shortcut is registered."
                 : "Could not register this shortcut.");
+            status->setSizePolicy(QSizePolicy::Maximum, QSizePolicy::Preferred);
             hl->addWidget(status);
         }
 
-        auto makeGhost = [&](const QString &text, const QString &tip, const char *name) {
-            auto *b = new QPushButton(text, row);
+        auto makeIconBtn = [&](const QIcon &icon, const QString &tip, const char *name) {
+            auto *b = new QPushButton(row);
             b->setObjectName(name);
+            b->setIcon(icon);
+            b->setIconSize(QSize(14, 14));
             b->setToolTip(tip);
             b->setCursor(Qt::PointingHandCursor);
-            b->setFixedHeight(26);
+            b->setFixedSize(28, 26);
+            b->setFlat(true);
             return b;
         };
 
-        auto *btnUp   = makeGhost("Up", "Move up", "btnGhost");
-        auto *btnDown = makeGhost("Down", "Move down", "btnGhost");
-        auto *btnEdit = makeGhost("Edit", "Edit item", "btnGhost");
-        auto *btnDel  = makeGhost("Remove", "Remove item", "btnDanger");
+        const QIcon editIcon = QIcon::fromTheme(
+            QStringLiteral("document-edit"),
+            style()->standardIcon(QStyle::SP_FileDialogDetailedView));
+        const QIcon delIcon = QIcon::fromTheme(
+            QStringLiteral("edit-delete"),
+            style()->standardIcon(QStyle::SP_TrashIcon));
+
+        auto *btnUp   = makeIconBtn(style()->standardIcon(QStyle::SP_ArrowUp), "Move up", "btnIcon");
+        auto *btnDown = makeIconBtn(style()->standardIcon(QStyle::SP_ArrowDown), "Move down", "btnIcon");
+        auto *btnEdit = makeIconBtn(editIcon, "Edit item", "btnIcon");
+        auto *btnDel  = makeIconBtn(delIcon, "Remove item", "btnDanger");
 
         hl->addWidget(btnUp);
         hl->addWidget(btnDown);

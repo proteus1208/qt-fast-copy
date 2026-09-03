@@ -1,6 +1,21 @@
 #pragma once
 
 #include <QString>
+#include <QWidget>
+#include <QPalette>
+#include <QColor>
+
+inline void forceBlackInputText(QWidget *w)
+{
+    if (!w) return;
+    QPalette p = w->palette();
+    p.setColor(QPalette::Text, QColor(0, 0, 0));
+    p.setColor(QPalette::WindowText, QColor(0, 0, 0));
+    p.setColor(QPalette::ButtonText, QColor(0, 0, 0));
+    p.setColor(QPalette::Base, QColor(255, 255, 255));
+    p.setColor(QPalette::PlaceholderText, QColor(156, 163, 175));
+    w->setPalette(p);
+}
 
 inline QString appStyleSheet()
 {
@@ -83,16 +98,23 @@ inline QString appStyleSheet()
             font-size: 11px;
             font-weight: 600;
         }
-        QLineEdit, QPlainTextEdit, QKeySequenceEdit {
+        QLineEdit, QPlainTextEdit, QKeySequenceEdit,
+        QKeySequenceEdit QLineEdit {
             background: #ffffff;
+            color: #000000;
             border: 1px solid #e5e7eb;
             border-radius: 6px;
             padding: 4px 8px;
             selection-background-color: #111827;
             selection-color: #ffffff;
         }
-        QLineEdit:focus, QPlainTextEdit:focus, QKeySequenceEdit:focus {
+        QLineEdit:focus, QPlainTextEdit:focus, QKeySequenceEdit:focus,
+        QKeySequenceEdit QLineEdit:focus {
             border: 1px solid #111827;
+            color: #000000;
+        }
+        QLineEdit::placeholder, QPlainTextEdit::placeholder {
+            color: #9ca3af;
         }
         QPushButton {
             background: #ffffff;
@@ -126,10 +148,21 @@ inline QString appStyleSheet()
             background: #e5e7eb;
             color: #111827;
         }
+        QPushButton#btnIcon {
+            background: transparent;
+            border: none;
+            padding: 2px;
+            min-width: 26px;
+        }
+        QPushButton#btnIcon:hover {
+            background: #e5e7eb;
+        }
         QPushButton#btnDanger {
             background: transparent;
             border: none;
             color: #b91c1c;
+            padding: 2px;
+            min-width: 26px;
         }
         QPushButton#btnDanger:hover {
             background: #fee2e2;
