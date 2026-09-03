@@ -53,23 +53,34 @@ ItemEditorDialog::ItemEditorDialog(const PasteItem &item, QWidget *parent)
     mainLayout->addWidget(textGroup);
 
     // ── Hotkey section ────────────────────────────────────────────────────
-    auto *hkGroup  = new QGroupBox("Per-Item Global Hotkey  (optional)", this);
-    auto *hkLayout = new QHBoxLayout(hkGroup);
-    hkLayout->setContentsMargins(10, 8, 10, 8);
+    auto *hkGroup  = new QGroupBox("Global hotkey for this item (optional)", this);
+    auto *hkOuter  = new QVBoxLayout(hkGroup);
+    hkOuter->setContentsMargins(10, 8, 10, 8);
 
-    auto *hkHint = new QLabel("Shortcut:", hkGroup);
+    auto *hkHint = new QLabel(
+        "Works anywhere in Windows. You do not need to open Settings or the picker. "
+        "Press the shortcut in any app to copy this text and paste it into the focused field.",
+        hkGroup);
+    hkHint->setWordWrap(true);
+    hkHint->setStyleSheet("color: gray; font-size: 11px;");
+    hkOuter->addWidget(hkHint);
+
+    auto *hkLayout = new QHBoxLayout;
+    auto *hkLabel  = new QLabel("Shortcut:", hkGroup);
     m_hotkeyEdit = new QKeySequenceEdit(hkGroup);
     m_hotkeyEdit->setKeySequence(item.hotkey);
+    m_hotkeyEdit->setMaximumSequenceLength(1);
     m_hotkeyEdit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    m_hotkeyEdit->setToolTip("Click here and press a key combination to set a global hotkey for this item.");
+    m_hotkeyEdit->setToolTip("Click here and press a key combination. It is registered as a system-wide hotkey.");
 
     auto *clearBtn = new QPushButton("Clear", hkGroup);
     clearBtn->setFixedWidth(55);
     connect(clearBtn, &QPushButton::clicked, m_hotkeyEdit, &QKeySequenceEdit::clear);
 
-    hkLayout->addWidget(hkHint);
+    hkLayout->addWidget(hkLabel);
     hkLayout->addWidget(m_hotkeyEdit, 1);
     hkLayout->addWidget(clearBtn);
+    hkOuter->addLayout(hkLayout);
     mainLayout->addWidget(hkGroup);
 
     // ── Buttons ───────────────────────────────────────────────────────────

@@ -143,8 +143,10 @@ void TrayIcon::showPickerMenu()
         QString displayLabel = QString("%1. %2").arg(i + 1).arg(label);
 
         QAction *act = menu.addAction(displayLabel);
-        if (!item.hotkey.isEmpty())
+        if (!item.hotkey.isEmpty()) {
             act->setShortcut(item.hotkey);
+            act->setShortcutVisibleInContextMenu(true);
+        }
 
         int idx = i;
         connect(act, &QAction::triggered, this, [this, idx]{ pasteItem(idx); });
@@ -160,35 +162,51 @@ void TrayIcon::pasteItem(int index)
     // 1. Set clipboard
     QApplication::clipboard()->setText(m_items[index].text);
 
-    // 2. Wait for menu to close, then send Ctrl+V to the previously focused window
-    QTimer::singleShot(150, this, [this] { sendCtrlV(); });
+    // Give the user time to release the item hotkey, then paste into the
+    // currently focused app. Item hotkeys are global — no picker needed.
+    QTimer::singleShot(250, this, [this] { sendCtrlV(); });
 }
+
+#ifdef Q_OS_WIN
+static void releaseIfHeld(WORD vk)
+{
+    if (GetAsyncKeyState(vk) & 0x8000) {
+        INPUT up{};
+        up.type       = INPUT_KEYBOARD;
+        up.ki.wVk     = vk;
+        up.ki.dwFlags = KEYEVENTF_KEYUP;
+        SendInput(1, &up, sizeof(INPUT));
+    }
+}
+#endif
 
 void TrayIcon::sendCtrlV()
 {
 #ifdef Q_OS_WIN
-    INPUT inputs[4] = {};
+    // If the item hotkey used Ctrl/Shift/Alt/Win, those keys may still be down.
+    releaseIfHeld(VK_CONTROL);
+    releaseIfHeld(VK_LCONTROL);
+    releaseIfHeld(VK_RCONTROL);
+    releaseIfHeld(VK_SHIFT);
+    releaseIfHeld(VK_LSHIFT);
+    releaseIfHeld(VK_RSHIFT);
+    releaseIfHeld(VK_MENU);
+    releaseIfHeld(VK_LMENU);
+    releaseIfHeld(VK_RMENU);
+    releaseIfHeld(VK_LWIN);
+    releaseIfHeld(VK_RWIN);
 
-    // Press Ctrl
+    INPUT inputs[4] = {};
     inputs[0].type       = INPUT_KEYBOARD;
     inputs[0].ki.wVk     = VK_CONTROL;
-    inputs[0].ki.dwFlags = 0;
-
-    // Press V
     inputs[1].type       = INPUT_KEYBOARD;
     inputs[1].ki.wVk     = 'V';
-    inputs[1].ki.dwFlags = 0;
-
-    // Release V
     inputs[2].type       = INPUT_KEYBOARD;
     inputs[2].ki.wVk     = 'V';
     inputs[2].ki.dwFlags = KEYEVENTF_KEYUP;
-
-    // Release Ctrl
     inputs[3].type       = INPUT_KEYBOARD;
     inputs[3].ki.wVk     = VK_CONTROL;
     inputs[3].ki.dwFlags = KEYEVENTF_KEYUP;
-
     SendInput(4, inputs, sizeof(INPUT));
 #endif
 }

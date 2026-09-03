@@ -7,9 +7,10 @@
 #include <QAbstractNativeEventFilter>
 #include <QHash>
 #include <QSet>
+#include <QWidget>
 
 // index == -1  -> global picker hotkey
-// index >= 0   -> per-item hotkey
+// index >= 0   -> per-item global hotkey (works without any window open)
 class HotkeyManager : public QObject, public QAbstractNativeEventFilter
 {
     Q_OBJECT
@@ -20,17 +21,12 @@ public:
     void setGlobalHotkey(const QKeySequence &seq);
     void setItemHotkeys(const QList<PasteItem> &items);
 
-    // Returns true if the picker global hotkey is currently registered OK
     bool isPickerRegistered() const;
-
-    // Returns the set of item indices whose hotkey is registered successfully
     QSet<int> registeredItemIndices() const;
 
 signals:
     void pickerRequested();
     void itemTriggered(int index);
-
-    // Emitted whenever registration state changes (e.g. after setGlobalHotkey / setItemHotkeys)
     void registrationChanged();
 
 protected:
@@ -40,13 +36,15 @@ private:
     void unregisterAll();
     void unregisterItemHotkeys();
     bool registerKey(const QKeySequence &seq, int itemIndex);
+    bool handleHotkeyId(int id);
 
+#ifdef Q_OS_WIN
+    void *nativeHwnd() const; // HWND
+#endif
+
+    QWidget *m_sink = nullptr; // hidden window that receives WM_HOTKEY
     int m_nextId = 1;
-
-    // Maps Windows hotkey ID -> item index (-1 = picker)
     QHash<int, int> m_idToIndex;
-
-    // Tracks which registrations succeeded
-    bool     m_pickerOk = false;
-    QSet<int> m_itemOkIndices; // item indices that registered successfully
+    bool m_pickerOk = false;
+    QSet<int> m_itemOkIndices;
 };

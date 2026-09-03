@@ -2,10 +2,57 @@
 
 #include <QApplication>
 #include <QDebug>
+#include <functional>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#endif
 
+namespace {
+
+class HotkeySinkWidget : public QWidget
+{
+public:
+    using Handler = std::function<bool(int)>;
+
+    explicit HotkeySinkWidget(Handler handler)
+        : QWidget(nullptr)
+        , m_handler(std::move(handler))
+    {
+        setObjectName(QStringLiteral("FastPasteHotkeySink"));
+        setWindowFlags(Qt::Tool | Qt::FramelessWindowHint | Qt::WindowDoesNotAcceptFocus);
+        setAttribute(Qt::WA_DontShowOnScreen, true);
+        setAttribute(Qt::WA_NativeWindow, true);
+        resize(1, 1);
+    }
+
+protected:
+    bool nativeEvent(const QByteArray &eventType, void *message, qintptr *result) override
+    {
+#ifdef Q_OS_WIN
+        if (eventType == "windows_generic_MSG" || eventType == "windows_dispatcher_MSG") {
+            auto *msg = static_cast<MSG *>(message);
+            if (msg && msg->message == WM_HOTKEY && m_handler(static_cast<int>(msg->wParam))) {
+                if (result)
+                    *result = 0;
+                return true;
+            }
+        }
+#else
+        Q_UNUSED(eventType);
+        Q_UNUSED(message);
+        Q_UNUSED(result);
+#endif
+        return QWidget::nativeEvent(eventType, message, result);
+    }
+
+private:
+    Handler m_handler;
+};
+
+} // namespace
+
+#ifdef Q_OS_WIN
 static UINT qtModsToWin(Qt::KeyboardModifiers mods)
 {
     UINT w = 0;
@@ -19,11 +66,11 @@ static UINT qtModsToWin(Qt::KeyboardModifiers mods)
 static UINT qtKeyToVK(Qt::Key key)
 {
     if (key >= Qt::Key_A && key <= Qt::Key_Z)
-        return 'A' + (key - Qt::Key_A);
+        return static_cast<UINT>('A' + (key - Qt::Key_A));
     if (key >= Qt::Key_0 && key <= Qt::Key_9)
-        return '0' + (key - Qt::Key_0);
+        return static_cast<UINT>('0' + (key - Qt::Key_0));
     if (key >= Qt::Key_F1 && key <= Qt::Key_F24)
-        return VK_F1 + (key - Qt::Key_F1);
+        return static_cast<UINT>(VK_F1 + (key - Qt::Key_F1));
 
     switch (key) {
     case Qt::Key_Space:        return VK_SPACE;
@@ -44,9 +91,6 @@ static UINT qtKeyToVK(Qt::Key key)
     case Qt::Key_Down:         return VK_DOWN;
     case Qt::Key_Print:        return VK_SNAPSHOT;
     case Qt::Key_Pause:        return VK_PAUSE;
-    case Qt::Key_CapsLock:     return VK_CAPITAL;
-    case Qt::Key_NumLock:      return VK_NUMLOCK;
-    case Qt::Key_ScrollLock:   return VK_SCROLL;
     case Qt::Key_Semicolon:    return VK_OEM_1;
     case Qt::Key_Equal:        return VK_OEM_PLUS;
     case Qt::Key_Comma:        return VK_OEM_COMMA;
@@ -63,27 +107,32 @@ static UINT qtKeyToVK(Qt::Key key)
 }
 
 static bool decodeSequence(const QKeySequence &seq,
-                            Qt::Key &outKey,
-                            Qt::KeyboardModifiers &outMods)
+                           Qt::Key &outKey,
+                           Qt::KeyboardModifiers &outMods)
 {
-    if (seq.isEmpty()) return false;
+    if (seq.isEmpty())
+        return false;
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    outKey  = seq[0].key();
-    outMods = seq[0].keyboardModifiers();
+    const QKeyCombination combo = seq[0];
+    outKey  = combo.key();
+    outMods = combo.keyboardModifiers();
 #else
-    int combo = seq[0];
+    const int combo = seq[0];
     outKey  = static_cast<Qt::Key>(combo & ~Qt::KeyboardModifierMask);
     outMods = static_cast<Qt::KeyboardModifiers>(combo & Qt::KeyboardModifierMask);
 #endif
-    return true;
+    outMods &= (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier);
+    return outKey != Qt::Key_unknown && outKey != 0;
 }
 #endif // Q_OS_WIN
-
-// ─────────────────────────────────────────────────────────────────────────────
 
 HotkeyManager::HotkeyManager(QObject *parent)
     : QObject(parent)
 {
+    m_sink = new HotkeySinkWidget([this](int id) { return handleHotkeyId(id); });
+    m_sink->winId(); // force HWND creation so RegisterHotKey has a target
+
     qApp->installNativeEventFilter(this);
 }
 
@@ -91,6 +140,8 @@ HotkeyManager::~HotkeyManager()
 {
     unregisterAll();
     qApp->removeNativeEventFilter(this);
+    delete m_sink;
+    m_sink = nullptr;
 }
 
 bool HotkeyManager::isPickerRegistered() const
@@ -103,16 +154,28 @@ QSet<int> HotkeyManager::registeredItemIndices() const
     return m_itemOkIndices;
 }
 
+#ifdef Q_OS_WIN
+void *HotkeyManager::nativeHwnd() const
+{
+    if (!m_sink)
+        return nullptr;
+    return reinterpret_cast<void *>(m_sink->winId());
+}
+#endif
+
 void HotkeyManager::setGlobalHotkey(const QKeySequence &seq)
 {
-    // Remove old picker registrations
     QList<int> toRemove;
-    for (auto it = m_idToIndex.begin(); it != m_idToIndex.end(); ++it)
-        if (it.value() == -1) toRemove.append(it.key());
+    for (auto it = m_idToIndex.begin(); it != m_idToIndex.end(); ++it) {
+        if (it.value() == -1)
+            toRemove.append(it.key());
+    }
 
 #ifdef Q_OS_WIN
+    HWND hwnd = static_cast<HWND>(nativeHwnd());
     for (int id : toRemove) {
-        UnregisterHotKey(nullptr, id);
+        if (hwnd)
+            UnregisterHotKey(hwnd, id);
         m_idToIndex.remove(id);
     }
 #else
@@ -121,7 +184,6 @@ void HotkeyManager::setGlobalHotkey(const QKeySequence &seq)
 #endif
 
     m_pickerOk = false;
-
     if (!seq.isEmpty())
         m_pickerOk = registerKey(seq, -1);
 
@@ -131,13 +193,10 @@ void HotkeyManager::setGlobalHotkey(const QKeySequence &seq)
 void HotkeyManager::setItemHotkeys(const QList<PasteItem> &items)
 {
     unregisterItemHotkeys();
-    m_itemOkIndices.clear();
 
     for (int i = 0; i < items.size(); ++i) {
-        if (!items[i].hotkey.isEmpty()) {
-            if (registerKey(items[i].hotkey, i))
-                m_itemOkIndices.insert(i);
-        }
+        if (!items[i].hotkey.isEmpty() && registerKey(items[i].hotkey, i))
+            m_itemOkIndices.insert(i);
     }
 
     emit registrationChanged();
@@ -146,12 +205,16 @@ void HotkeyManager::setItemHotkeys(const QList<PasteItem> &items)
 void HotkeyManager::unregisterItemHotkeys()
 {
     QList<int> toRemove;
-    for (auto it = m_idToIndex.begin(); it != m_idToIndex.end(); ++it)
-        if (it.value() >= 0) toRemove.append(it.key());
+    for (auto it = m_idToIndex.begin(); it != m_idToIndex.end(); ++it) {
+        if (it.value() >= 0)
+            toRemove.append(it.key());
+    }
 
 #ifdef Q_OS_WIN
+    HWND hwnd = static_cast<HWND>(nativeHwnd());
     for (int id : toRemove) {
-        UnregisterHotKey(nullptr, id);
+        if (hwnd)
+            UnregisterHotKey(hwnd, id);
         m_idToIndex.remove(id);
     }
 #else
@@ -165,8 +228,11 @@ void HotkeyManager::unregisterItemHotkeys()
 void HotkeyManager::unregisterAll()
 {
 #ifdef Q_OS_WIN
-    for (int id : m_idToIndex.keys())
-        UnregisterHotKey(nullptr, id);
+    HWND hwnd = static_cast<HWND>(nativeHwnd());
+    if (hwnd) {
+        for (int id : m_idToIndex.keys())
+            UnregisterHotKey(hwnd, id);
+    }
 #endif
     m_idToIndex.clear();
     m_pickerOk = false;
@@ -175,23 +241,26 @@ void HotkeyManager::unregisterAll()
 
 bool HotkeyManager::registerKey(const QKeySequence &seq, int itemIndex)
 {
-    if (seq.isEmpty()) return false;
+    if (seq.isEmpty())
+        return false;
 
 #ifdef Q_OS_WIN
-    Qt::Key key;
+    Qt::Key key = Qt::Key_unknown;
     Qt::KeyboardModifiers mods;
-    if (!decodeSequence(seq, key, mods)) return false;
+    if (!decodeSequence(seq, key, mods))
+        return false;
 
-    UINT vk    = qtKeyToVK(key);
-    UINT wmods = qtModsToWin(mods);
+    const UINT vk    = qtKeyToVK(key);
+    const UINT wmods = qtModsToWin(mods);
+    HWND hwnd        = static_cast<HWND>(nativeHwnd());
 
-    if (vk == 0) {
-        qWarning() << "HotkeyManager: cannot map key" << key;
+    if (!hwnd || vk == 0) {
+        qWarning() << "HotkeyManager: cannot register" << seq.toString();
         return false;
     }
 
-    int id = m_nextId++;
-    if (!RegisterHotKey(nullptr, id, wmods | MOD_NOREPEAT, vk)) {
+    const int id = m_nextId++;
+    if (!RegisterHotKey(hwnd, id, wmods | MOD_NOREPEAT, vk)) {
         qWarning() << "HotkeyManager: RegisterHotKey failed for"
                    << seq.toString() << "error:" << GetLastError();
         return false;
@@ -200,9 +269,23 @@ bool HotkeyManager::registerKey(const QKeySequence &seq, int itemIndex)
     m_idToIndex[id] = itemIndex;
     return true;
 #else
-    Q_UNUSED(seq); Q_UNUSED(itemIndex);
+    Q_UNUSED(seq);
+    Q_UNUSED(itemIndex);
     return false;
 #endif
+}
+
+bool HotkeyManager::handleHotkeyId(int id)
+{
+    const auto it = m_idToIndex.find(id);
+    if (it == m_idToIndex.end())
+        return false;
+
+    if (it.value() == -1)
+        emit pickerRequested();
+    else
+        emit itemTriggered(it.value());
+    return true;
 }
 
 bool HotkeyManager::nativeEventFilter(const QByteArray &eventType, void *message, qintptr *result)
@@ -213,22 +296,14 @@ bool HotkeyManager::nativeEventFilter(const QByteArray &eventType, void *message
     if (eventType != "windows_generic_MSG" && eventType != "windows_dispatcher_MSG")
         return false;
 
-    MSG *msg = static_cast<MSG *>(message);
+    auto *msg = static_cast<MSG *>(message);
     if (!msg || msg->message != WM_HOTKEY)
         return false;
 
-    int id = static_cast<int>(msg->wParam);
-    auto it = m_idToIndex.find(id);
-    if (it == m_idToIndex.end()) return false;
-
-    if (it.value() == -1)
-        emit pickerRequested();
-    else
-        emit itemTriggered(it.value());
-
-    return true;
+    return handleHotkeyId(static_cast<int>(msg->wParam));
 #else
-    Q_UNUSED(eventType); Q_UNUSED(message);
+    Q_UNUSED(eventType);
+    Q_UNUSED(message);
     return false;
 #endif
 }
