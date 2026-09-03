@@ -13,13 +13,13 @@ ItemEditorDialog::ItemEditorDialog(const PasteItem &item, QWidget *parent)
     : QDialog(parent)
 {
     setWindowTitle("Edit item");
-    setMinimumSize(480, 420);
+    setMinimumSize(440, 380);
     setModal(true);
     setStyleSheet(appStyleSheet());
 
     auto *mainLayout = new QVBoxLayout(this);
-    mainLayout->setSpacing(16);
-    mainLayout->setContentsMargins(28, 24, 28, 24);
+    mainLayout->setSpacing(6);
+    mainLayout->setContentsMargins(14, 12, 14, 12);
 
     auto *title = new QLabel("Edit item", this);
     title->setObjectName("dialogTitle");
@@ -43,7 +43,7 @@ ItemEditorDialog::ItemEditorDialog(const PasteItem &item, QWidget *parent)
     m_textEdit = new QPlainTextEdit(this);
     m_textEdit->setPlaceholderText("Paste content. Use Enter for new lines.");
     m_textEdit->setPlainText(item.text);
-    m_textEdit->setMinimumHeight(140);
+    m_textEdit->setMinimumHeight(110);
     m_textEdit->setTabChangesFocus(true);
     auto *textHint = new QLabel("This is pasted into the focused field.", this);
     textHint->setObjectName("fieldHint");

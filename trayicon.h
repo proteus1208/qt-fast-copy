@@ -22,7 +22,6 @@ public slots:
     void pasteItem(int index);
 
 private slots:
-    void onTrayActivated(QSystemTrayIcon::ActivationReason reason);
     void onSettingsTriggered();
     void onAboutTriggered();
     void onDataChanged(const QList<PasteItem> &items, const QKeySequence &globalHotkey);

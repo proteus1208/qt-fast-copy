@@ -14,7 +14,7 @@ inline QString appStyleSheet()
             font-family: "Segoe UI", "Helvetica Neue", sans-serif;
         }
         QLabel#labelPageTitle {
-            font-size: 26px;
+            font-size: 20px;
             font-weight: 700;
             color: #111827;
         }
@@ -29,7 +29,7 @@ inline QString appStyleSheet()
         QLabel#labelItems,
         QLabel#fieldLabel,
         QLabel#dialogTitle {
-            font-size: 15px;
+            font-size: 13px;
             font-weight: 600;
             color: #111827;
         }
@@ -46,7 +46,7 @@ inline QString appStyleSheet()
         }
         QWidget#itemCard {
             background: #ffffff;
-            border-radius: 12px;
+            border-radius: 8px;
         }
         QWidget#itemCard:hover {
             background: #eef2ff;
@@ -70,24 +70,24 @@ inline QString appStyleSheet()
         QLabel#statusOk {
             color: #047857;
             background: #d1fae5;
-            border-radius: 10px;
-            padding: 3px 10px;
+            border-radius: 6px;
+            padding: 1px 6px;
             font-size: 11px;
             font-weight: 600;
         }
         QLabel#statusFail {
             color: #b91c1c;
             background: #fee2e2;
-            border-radius: 10px;
-            padding: 3px 10px;
+            border-radius: 6px;
+            padding: 1px 6px;
             font-size: 11px;
             font-weight: 600;
         }
         QLineEdit, QPlainTextEdit, QKeySequenceEdit {
             background: #ffffff;
             border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 8px 12px;
+            border-radius: 6px;
+            padding: 4px 8px;
             selection-background-color: #111827;
             selection-color: #ffffff;
         }
@@ -97,8 +97,8 @@ inline QString appStyleSheet()
         QPushButton {
             background: #ffffff;
             border: 1px solid #e5e7eb;
-            border-radius: 10px;
-            padding: 8px 14px;
+            border-radius: 6px;
+            padding: 4px 10px;
             color: #111827;
             font-weight: 600;
         }
@@ -112,7 +112,7 @@ inline QString appStyleSheet()
             background: #111827;
             color: #ffffff;
             border: none;
-            min-height: 40px;
+            min-height: 32px;
         }
         QPushButton#btnAddItem:hover, QPushButton#btnSave:hover {
             background: #1f2937;

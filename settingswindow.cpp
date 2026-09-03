@@ -94,11 +94,10 @@ void SettingsWindow::rebuildList()
 
         auto *row = new QWidget(m_listContainer);
         row->setObjectName("itemCard");
-        row->setMinimumHeight(64);
 
         auto *hl = new QHBoxLayout(row);
-        hl->setContentsMargins(16, 12, 12, 12);
-        hl->setSpacing(12);
+        hl->setContentsMargins(8, 6, 6, 6);
+        hl->setSpacing(6);
 
         auto *numLabel = new QLabel(QString::number(i + 1), row);
         numLabel->setObjectName("itemIndex");
@@ -146,7 +145,7 @@ void SettingsWindow::rebuildList()
             b->setObjectName(name);
             b->setToolTip(tip);
             b->setCursor(Qt::PointingHandCursor);
-            b->setFixedHeight(32);
+            b->setFixedHeight(26);
             return b;
         };
 

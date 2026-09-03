@@ -28,7 +28,7 @@ TrayIcon::TrayIcon(QObject *parent)
         appIcon = QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
     m_tray->setIcon(appIcon);
     qApp->setWindowIcon(appIcon); // also sets taskbar / window title-bar icon
-    m_tray->setToolTip("Fast Paste\nLeft-click to open picker\nRight-click for menu");
+    m_tray->setToolTip("Fast Paste\nRight-click for Settings, About, Quit");
 
     // --- Tray menu ---
     m_trayMenu = new QMenu();
@@ -42,7 +42,6 @@ TrayIcon::TrayIcon(QObject *parent)
     connect(actQuit,     &QAction::triggered, qApp, &QApplication::quit);
 
     m_tray->setContextMenu(m_trayMenu);
-    connect(m_tray, &QSystemTrayIcon::activated, this, &TrayIcon::onTrayActivated);
     m_tray->show();
 
     // --- Hotkey manager ---
@@ -76,12 +75,6 @@ void TrayIcon::loadAndApply()
 
     m_hotkeyMgr->setGlobalHotkey(m_globalHotkey);
     m_hotkeyMgr->setItemHotkeys(m_items);
-}
-
-void TrayIcon::onTrayActivated(QSystemTrayIcon::ActivationReason reason)
-{
-    if (reason == QSystemTrayIcon::Trigger) // left-click
-        showPickerMenu();
 }
 
 void TrayIcon::onSettingsTriggered()
