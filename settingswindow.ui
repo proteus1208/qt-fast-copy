@@ -3,127 +3,195 @@
  <class>SettingsWindow</class>
  <widget class="QMainWindow" name="SettingsWindow">
   <property name="geometry">
-   <rect><x>0</x><y>0</y><width>580</width><height>660</height></rect>
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>580</width>
+    <height>660</height>
+   </rect>
   </property>
   <property name="windowTitle">
-   <string>Fast Paste — Settings</string>
+   <string>Fast Paste - Settings</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <layout class="QVBoxLayout" name="verticalLayout">
-    <property name="spacing"><number>8</number></property>
-    <property name="leftMargin"><number>12</number></property>
-    <property name="topMargin"><number>12</number></property>
-    <property name="rightMargin"><number>12</number></property>
-    <property name="bottomMargin"><number>12</number></property>
-
-    <!-- ── Global Hotkey group ── -->
+    <property name="spacing">
+     <number>8</number>
+    </property>
+    <property name="leftMargin">
+     <number>12</number>
+    </property>
+    <property name="topMargin">
+     <number>12</number>
+    </property>
+    <property name="rightMargin">
+     <number>12</number>
+    </property>
+    <property name="bottomMargin">
+     <number>12</number>
+    </property>
     <item>
      <widget class="QGroupBox" name="groupBoxGlobal">
-      <property name="title"><string>Global Picker Hotkey</string></property>
+      <property name="title">
+       <string>Global Picker Hotkey</string>
+      </property>
       <layout class="QHBoxLayout" name="hboxGlobal">
-       <property name="leftMargin"><number>10</number></property>
-       <property name="rightMargin"><number>10</number></property>
-       <property name="topMargin"><number>8</number></property>
-       <property name="bottomMargin"><number>8</number></property>
+       <property name="leftMargin">
+        <number>10</number>
+       </property>
+       <property name="topMargin">
+        <number>8</number>
+       </property>
+       <property name="rightMargin">
+        <number>10</number>
+       </property>
+       <property name="bottomMargin">
+        <number>8</number>
+       </property>
        <item>
         <widget class="QLabel" name="labelGlobalHotkey">
-         <property name="text"><string>Hotkey to open picker:</string></property>
+         <property name="text">
+          <string>Hotkey to open picker:</string>
+         </property>
         </widget>
        </item>
        <item>
         <widget class="QKeySequenceEdit" name="keySeqEdit">
          <property name="toolTip">
-          <string>Click here, then press your desired key combination (e.g. Ctrl+Shift+V)</string>
+          <string>Click here, then press your desired key combination.</string>
          </property>
         </widget>
        </item>
        <item>
         <widget class="QPushButton" name="btnClearGlobal">
-         <property name="text"><string>Clear</string></property>
-         <property name="maximumWidth"><number>60</number></property>
+         <property name="maximumWidth">
+          <number>60</number>
+         </property>
+         <property name="text">
+          <string>Clear</string>
+         </property>
         </widget>
        </item>
        <item>
         <widget class="QLabel" name="labelGlobalStatus">
-         <property name="text"><string></string></property>
-         <property name="visible"><bool>false</bool></property>
-         <property name="minimumWidth"><number>70</number></property>
+         <property name="visible">
+          <bool>false</bool>
+         </property>
+         <property name="minimumWidth">
+          <number>70</number>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
         </widget>
        </item>
       </layout>
      </widget>
     </item>
-
-    <!-- ── Items header ── -->
     <item>
      <layout class="QHBoxLayout" name="hboxItemsHeader">
       <item>
        <widget class="QLabel" name="labelItems">
-        <property name="text"><string>Paste Items</string></property>
-        <property name="font"><font><bold>true</bold></font></property>
+        <property name="font">
+         <font>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="text">
+         <string>Paste Items</string>
+        </property>
        </widget>
       </item>
       <item>
-       <spacer>
-        <property name="orientation"><enum>Qt::Horizontal</enum></property>
+       <spacer name="horizontalSpacerTop">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
        </spacer>
       </item>
       <item>
        <widget class="QLabel" name="labelHint">
-        <property name="text"><string>&lt;span style='color:#27ae60'&gt;●&lt;/span&gt; active &nbsp;&nbsp; &lt;span style='color:#e74c3c'&gt;●&lt;/span&gt; failed</string></property>
-        <property name="textFormat"><enum>Qt::RichText</enum></property>
         <property name="styleSheet">
-         <string>font-size: 11px;</string>
+         <string notr="true">font-size: 11px; color: gray;</string>
+        </property>
+        <property name="text">
+         <string>Green dot = active, red dot = failed</string>
         </property>
        </widget>
       </item>
      </layout>
     </item>
-
-    <!-- ── Scrollable item list ── -->
     <item>
      <widget class="QScrollArea" name="scrollArea">
-      <property name="widgetResizable"><bool>true</bool></property>
-      <property name="horizontalScrollBarPolicy"><enum>Qt::ScrollBarAlwaysOff</enum></property>
-      <property name="frameShape"><enum>QFrame::StyledPanel</enum></property>
+      <property name="frameShape">
+       <enum>QFrame::StyledPanel</enum>
+      </property>
+      <property name="horizontalScrollBarPolicy">
+       <enum>Qt::ScrollBarAlwaysOff</enum>
+      </property>
+      <property name="widgetResizable">
+       <bool>true</bool>
+      </property>
       <widget class="QWidget" name="scrollAreaWidgetContents">
        <layout class="QVBoxLayout" name="itemsLayout">
-        <property name="alignment"><set>Qt::AlignTop</set></property>
-        <property name="spacing"><number>3</number></property>
-        <property name="leftMargin"><number>4</number></property>
-        <property name="topMargin"><number>4</number></property>
-        <property name="rightMargin"><number>4</number></property>
-        <property name="bottomMargin"><number>4</number></property>
+        <property name="spacing">
+         <number>3</number>
+        </property>
+        <property name="leftMargin">
+         <number>4</number>
+        </property>
+        <property name="topMargin">
+         <number>4</number>
+        </property>
+        <property name="rightMargin">
+         <number>4</number>
+        </property>
+        <property name="bottomMargin">
+         <number>4</number>
+        </property>
+        <property name="alignment">
+         <set>Qt::AlignTop</set>
+        </property>
        </layout>
       </widget>
      </widget>
     </item>
-
-    <!-- ── Add button ── -->
     <item>
-     <layout class="QHBoxLayout">
+     <layout class="QHBoxLayout" name="hboxAddItem">
       <item>
        <widget class="QPushButton" name="btnAddItem">
-        <property name="text"><string>＋  Add Item</string></property>
-        <property name="minimumHeight"><number>32</number></property>
+        <property name="minimumHeight">
+         <number>32</number>
+        </property>
+        <property name="text">
+         <string>+ Add Item</string>
+        </property>
        </widget>
       </item>
       <item>
-       <spacer><property name="orientation"><enum>Qt::Horizontal</enum></property></spacer>
+       <spacer name="horizontalSpacerBottom">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
       </item>
      </layout>
     </item>
-
    </layout>
   </widget>
  </widget>
- <customwidgets>
-  <customwidget>
-   <class>QKeySequenceEdit</class>
-   <extends>QWidget</extends>
-   <header>QKeySequenceEdit</header>
-  </customwidget>
- </customwidgets>
  <resources/>
  <connections/>
 </ui>
