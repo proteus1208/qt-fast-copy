@@ -5,6 +5,7 @@
 
 #include <QApplication>
 #include <QClipboard>
+#include <QMimeData>
 #include <QMenu>
 #include <QAction>
 #include <QMessageBox>
@@ -12,7 +13,11 @@
 #include <QTimer>
 #include <QStyle>
 #include <QIcon>
-#include <QPixmap>
+#include <QFileInfo>
+#include <QDir>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QFileSystemWatcher>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -21,41 +26,51 @@
 TrayIcon::TrayIcon(QObject *parent)
     : QObject(parent)
 {
-    // --- Tray icon ---
     m_tray = new QSystemTrayIcon(this);
     QIcon appIcon(":/assets/icon.ico");
     if (appIcon.isNull())
         appIcon = QApplication::style()->standardIcon(QStyle::SP_ComputerIcon);
     m_tray->setIcon(appIcon);
-    qApp->setWindowIcon(appIcon); // also sets taskbar / window title-bar icon
+    qApp->setWindowIcon(appIcon);
     m_tray->setToolTip("Fast Paste\nRight-click for Settings, About, Quit");
 
-    // --- Tray menu ---
     m_trayMenu = new QMenu();
     QAction *actSettings = m_trayMenu->addAction("Settings");
+    QAction *actOpenStore = m_trayMenu->addAction("Open store folder");
     QAction *actAbout    = m_trayMenu->addAction("About");
     m_trayMenu->addSeparator();
     QAction *actQuit = m_trayMenu->addAction("Quit");
 
     connect(actSettings, &QAction::triggered, this, &TrayIcon::onSettingsTriggered);
+    connect(actOpenStore, &QAction::triggered, this, &TrayIcon::onOpenStoreFolder);
     connect(actAbout,    &QAction::triggered, this, &TrayIcon::onAboutTriggered);
     connect(actQuit,     &QAction::triggered, qApp, &QApplication::quit);
 
     m_tray->setContextMenu(m_trayMenu);
     m_tray->show();
 
-    // --- Hotkey manager ---
     m_hotkeyMgr = new HotkeyManager(this);
     connect(m_hotkeyMgr, &HotkeyManager::pickerRequested,
             this, &TrayIcon::showPickerMenu);
+    connect(m_hotkeyMgr, &HotkeyManager::pasteTextOnlyRequested,
+            this, &TrayIcon::pasteTextOnly);
     connect(m_hotkeyMgr, &HotkeyManager::itemTriggered,
-            this, &TrayIcon::pasteItem);
+            this, &TrayIcon::pasteStorePath);
 
-    // --- Settings window ---
+    m_watcher = new QFileSystemWatcher(this);
+    connect(m_watcher, &QFileSystemWatcher::directoryChanged,
+            this, &TrayIcon::onStoreChanged);
+    connect(m_watcher, &QFileSystemWatcher::fileChanged,
+            this, &TrayIcon::onStoreChanged);
+
     m_settingsWin = new SettingsWindow();
     m_settingsWin->setHotkeyManager(m_hotkeyMgr);
-    connect(m_settingsWin, &SettingsWindow::dataChanged,
-            this, &TrayIcon::onDataChanged);
+    connect(m_settingsWin, &SettingsWindow::appSettingsChanged,
+            this, &TrayIcon::onAppSettingsChanged);
+    connect(m_settingsWin, &SettingsWindow::storeChanged,
+            this, &TrayIcon::onStoreChanged);
+    connect(m_settingsWin, &SettingsWindow::pasteTextOnlyRequested,
+            this, &TrayIcon::pasteTextOnly);
 
     loadAndApply();
 }
@@ -68,13 +83,74 @@ TrayIcon::~TrayIcon()
 
 void TrayIcon::loadAndApply()
 {
-    m_items        = StorageManager::loadItems();
-    m_globalHotkey = StorageManager::loadGlobalHotkey();
+    m_app = StorageManager::loadAppSettings();
+    StorageManager::ensureStoreFolder(m_app.storePath);
+    StorageManager::migrateLegacyItemsIfNeeded(m_app.storePath);
 
-    m_settingsWin->setData(m_items, m_globalHotkey);
+    reloadStore();
 
-    m_hotkeyMgr->setGlobalHotkey(m_globalHotkey);
-    m_hotkeyMgr->setItemHotkeys(m_items);
+    m_settingsWin->setAppSettings(m_app);
+    m_settingsWin->setRootEntries(m_rootEntries);
+
+    m_hotkeyMgr->setGlobalHotkey(m_app.globalHotkey);
+    m_hotkeyMgr->setPasteTextOnlyHotkey(m_app.pasteTextOnlyHotkey);
+}
+
+void TrayIcon::clearStoreWatches()
+{
+    const QStringList watchedDirs = m_watcher->directories();
+    if (!watchedDirs.isEmpty())
+        m_watcher->removePaths(watchedDirs);
+    const QStringList watchedFiles = m_watcher->files();
+    if (!watchedFiles.isEmpty())
+        m_watcher->removePaths(watchedFiles);
+}
+
+void TrayIcon::watchTree(const QString &dirPath, const QList<StoreEntry> &tree)
+{
+    if (QDir(dirPath).exists())
+        m_watcher->addPath(dirPath);
+    const QString metaPath = QDir(dirPath).filePath(QLatin1String(StorageManager::kMetaFileName));
+    if (QFileInfo::exists(metaPath))
+        m_watcher->addPath(metaPath);
+
+    for (const StoreEntry &e : tree) {
+        if (e.kind == StoreEntryKind::Folder)
+            watchTree(e.absolutePath, e.children);
+    }
+}
+
+void TrayIcon::reloadStore()
+{
+    clearStoreWatches();
+
+    // One tree walk: settings list, FS watches, and hotkey registration.
+    const QList<StoreEntry> tree = StorageManager::loadTree(m_app.storePath);
+    m_rootEntries.clear();
+    m_rootEntries.reserve(tree.size());
+    for (const StoreEntry &e : tree) {
+        StoreEntry root = e;
+        root.children.clear();
+        m_rootEntries.append(root);
+    }
+
+    watchTree(m_app.storePath, tree);
+    m_hotkeyMgr->setItemHotkeys(StorageManager::collectHotkeys(tree));
+
+    if (m_settingsWin)
+        m_settingsWin->setRootEntries(m_rootEntries);
+}
+
+void TrayIcon::onStoreChanged()
+{
+    // Debounce bursty FS + settings saves (meta.json + file writes).
+    if (m_reloadPending)
+        return;
+    m_reloadPending = true;
+    QTimer::singleShot(200, this, [this] {
+        m_reloadPending = false;
+        reloadStore();
+    });
 }
 
 void TrayIcon::onSettingsTriggered()
@@ -84,80 +160,133 @@ void TrayIcon::onSettingsTriggered()
     m_settingsWin->activateWindow();
 }
 
+void TrayIcon::onOpenStoreFolder()
+{
+    StorageManager::ensureStoreFolder(m_app.storePath);
+    QDesktopServices::openUrl(QUrl::fromLocalFile(m_app.storePath));
+}
+
 void TrayIcon::onAboutTriggered()
 {
     QMessageBox::about(nullptr, "About Fast Paste",
         "<b>Fast Paste</b><br><br>"
-        "Quickly paste pre-configured text snippets via a global hotkey or system tray.<br><br>"
-        "• Press the configured global hotkey to open the picker menu<br>"
-        "• Configure per-item hotkeys to paste directly<br>"
-        "• Text can contain multiple lines<br><br>"
-        "Version 1.0");
+        "Paste items from a store folder that mirrors File Explorer.<br><br>"
+        "• Extensionless files paste their text content<br>"
+        "• Normal files paste their absolute path<br>"
+        "• Folders open as nested menus<br>"
+        "• <b>Paste text only</b> strips images/HTML from the clipboard<br><br>"
+        "Version 1.1");
 }
 
-void TrayIcon::onDataChanged(const QList<PasteItem> &items, const QKeySequence &globalHotkey)
+void TrayIcon::onAppSettingsChanged(const AppSettings &settings)
 {
-    m_items        = items;
-    m_globalHotkey = globalHotkey;
+    const bool pathChanged = settings.storePath != m_app.storePath;
+    m_app = settings;
+    StorageManager::saveAppSettings(m_app);
+    StorageManager::ensureStoreFolder(m_app.storePath);
 
-    StorageManager::save(items, globalHotkey);
+    m_hotkeyMgr->setGlobalHotkey(m_app.globalHotkey);
+    m_hotkeyMgr->setPasteTextOnlyHotkey(m_app.pasteTextOnlyHotkey);
 
-    m_hotkeyMgr->setGlobalHotkey(globalHotkey);
-    m_hotkeyMgr->setItemHotkeys(items);
+    if (pathChanged)
+        reloadStore();
 }
 
 // ─── Picker menu ─────────────────────────────────────────────────────────────
 
-void TrayIcon::showPickerMenu()
+void TrayIcon::populateMenu(QMenu *menu, const QString &dirPath)
 {
-    if (m_items.isEmpty()) {
-        m_tray->showMessage("Fast Paste",
-            "No items configured.\nRight-click the tray icon → Settings to add some.",
-            QSystemTrayIcon::Information, 3000);
+    const QList<StoreEntry> entries = StorageManager::loadDirectory(dirPath);
+
+    if (entries.isEmpty()) {
+        QAction *empty = menu->addAction(QStringLiteral("(empty)"));
+        empty->setEnabled(false);
         return;
     }
 
-    QMenu menu;
-    menu.setTitle("Fast Paste");
-
-    for (int i = 0; i < m_items.size(); ++i) {
-        const PasteItem &item = m_items[i];
-
-        // Use title if set, otherwise fall back to first line of text
-        QString label = item.title.trimmed();
-        if (label.isEmpty()) {
-            label = item.text;
-            int nl = label.indexOf('\n');
-            if (nl != -1) label = label.left(nl) + "…";
-            if (label.length() > 60) label = label.left(60) + "…";
+    for (const StoreEntry &entry : entries) {
+        if (entry.kind == StoreEntryKind::Folder) {
+            QMenu *sub = menu->addMenu(entry.icon, entry.name);
+            // Lazy-load children when the submenu opens (performance).
+            const QString childPath = entry.absolutePath;
+            connect(sub, &QMenu::aboutToShow, this, [this, sub, childPath] {
+                if (!sub->actions().isEmpty())
+                    return;
+                populateMenu(sub, childPath);
+            });
+            continue;
         }
-        if (label.trimmed().isEmpty()) label = QString("(item %1)").arg(i + 1);
 
-        QString displayLabel = QString("%1. %2").arg(i + 1).arg(label);
-
-        QAction *act = menu.addAction(displayLabel);
-        if (!item.hotkey.isEmpty()) {
-            act->setShortcut(item.hotkey);
+        QAction *act = menu->addAction(entry.icon, entry.name);
+        if (!entry.hotkey.isEmpty()) {
+            act->setShortcut(entry.hotkey);
             act->setShortcutVisibleInContextMenu(true);
         }
-
-        int idx = i;
-        connect(act, &QAction::triggered, this, [this, idx]{ pasteItem(idx); });
+        const QString path = entry.absolutePath;
+        connect(act, &QAction::triggered, this, [this, path] { pasteStorePath(path); });
     }
+}
+
+void TrayIcon::showPickerMenu()
+{
+    QMenu menu;
+    menu.setTitle(QStringLiteral("Fast Paste"));
+
+    // First line: paste text only (strips OneNote images / rich clipboard data).
+    QAction *pasteText = menu.addAction(
+        QApplication::style()->standardIcon(QStyle::SP_FileDialogContentsView),
+        QStringLiteral("Paste text only"));
+    if (!m_app.pasteTextOnlyHotkey.isEmpty()) {
+        pasteText->setShortcut(m_app.pasteTextOnlyHotkey);
+        pasteText->setShortcutVisibleInContextMenu(true);
+    }
+    connect(pasteText, &QAction::triggered, this, &TrayIcon::pasteTextOnly);
+    menu.addSeparator();
+
+    // Live directory read keeps the picker fresh; folders lazy-load on open.
+    populateMenu(&menu, m_app.storePath);
 
     menu.exec(QCursor::pos());
 }
 
-void TrayIcon::pasteItem(int index)
+void TrayIcon::clipboardPaste(const QString &text)
 {
-    if (index < 0 || index >= m_items.size()) return;
-
-    // 1. Set clipboard
-    QApplication::clipboard()->setText(m_items[index].text);
-
-    // Give the user time to release the item hotkey, then paste into the
-    // currently focused app. Item hotkeys are global — no picker needed.
+    QApplication::clipboard()->setText(text);
     QTimer::singleShot(250, this, [this] { sendCtrlV(); });
+}
+
+void TrayIcon::pasteStorePath(const QString &absolutePath)
+{
+    const QFileInfo info(absolutePath);
+    if (!info.exists()) {
+        m_tray->showMessage(QStringLiteral("Fast Paste"),
+                            QStringLiteral("Item no longer exists:\n%1").arg(absolutePath),
+                            QSystemTrayIcon::Warning, 3000);
+        reloadStore();
+        return;
+    }
+
+    if (info.isDir()) {
+        // Folder activation via hotkey: paste the folder path.
+        clipboardPaste(QDir::toNativeSeparators(info.absoluteFilePath()));
+        return;
+    }
+
+    if (info.suffix().isEmpty()) {
+        clipboardPaste(StorageManager::readTextFile(absolutePath));
+        return;
+    }
+
+    clipboardPaste(QDir::toNativeSeparators(info.absoluteFilePath()));
+}
+
+void TrayIcon::pasteTextOnly()
+{
+    const QClipboard *cb = QApplication::clipboard();
+    const QMimeData *mime = cb->mimeData();
+    const QString text = mime ? mime->text() : QString();
+    // Replace complex clipboard (images / HTML) with plain text only, then paste.
+    clipboardPaste(text);
 }
 
 #ifdef Q_OS_WIN
@@ -176,7 +305,6 @@ static void releaseIfHeld(WORD vk)
 void TrayIcon::sendCtrlV()
 {
 #ifdef Q_OS_WIN
-    // If the item hotkey used Ctrl/Shift/Alt/Win, those keys may still be down.
     releaseIfHeld(VK_CONTROL);
     releaseIfHeld(VK_LCONTROL);
     releaseIfHeld(VK_RCONTROL);

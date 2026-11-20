@@ -19,11 +19,14 @@ public:
     explicit SettingsWindow(QWidget *parent = nullptr);
     ~SettingsWindow() override;
 
-    void setData(const QList<PasteItem> &items, const QKeySequence &globalHotkey);
+    void setAppSettings(const AppSettings &settings);
+    void setRootEntries(const QList<StoreEntry> &entries);
     void setHotkeyManager(HotkeyManager *mgr);
 
 signals:
-    void dataChanged(const QList<PasteItem> &items, const QKeySequence &globalHotkey);
+    void appSettingsChanged(const AppSettings &settings);
+    void storeChanged();
+    void pasteTextOnlyRequested();
 
 private slots:
     void onAddItem();
@@ -31,14 +34,21 @@ private slots:
     void onRemoveItem(int index);
     void onMoveUp(int index);
     void onMoveDown(int index);
+    void onBrowseStore();
+    void onOpenStore();
+    void onStorePathEdited();
     void onGlobalHotkeyChanged();
-    void rebuildList(); // also called when hotkey registration changes
+    void onPasteTextHotkeyChanged();
+    void rebuildList();
 
 private:
+    void emitAppSettings();
+    void persistOrder();
+
     Ui::SettingsWindow *ui;
-    QList<PasteItem>   m_items;
-    QKeySequence       m_globalHotkey;
-    QWidget           *m_listContainer = nullptr;
-    QVBoxLayout       *m_listLayout    = nullptr;
-    HotkeyManager     *m_hotkeyMgr    = nullptr;
+    AppSettings         m_app;
+    QList<StoreEntry>   m_entries;
+    QWidget            *m_listContainer = nullptr;
+    QVBoxLayout        *m_listLayout    = nullptr;
+    HotkeyManager      *m_hotkeyMgr     = nullptr;
 };

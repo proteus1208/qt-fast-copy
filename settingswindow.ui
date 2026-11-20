@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>560</width>
-    <height>560</height>
+    <width>620</width>
+    <height>640</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -40,9 +40,80 @@
     <item>
      <widget class="QLabel" name="labelPageSubtitle">
       <property name="text">
-       <string>Configure the picker shortcut and your paste items.</string>
+       <string>Items live in a store folder. Reorder here; manage files in Explorer.</string>
       </property>
      </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="hboxStoreTitle">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="labelStoreTitle">
+        <property name="text">
+         <string>Store folder</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnOpenStore">
+        <property name="text">
+         <string>Open in File Explorer</string>
+        </property>
+        <property name="cursor">
+         <cursorShape>PointingHandCursor</cursorShape>
+        </property>
+        <property name="flat">
+         <bool>true</bool>
+        </property>
+        <property name="toolTip">
+         <string>Open the store directory in File Explorer</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacerStoreTitle">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <item>
+     <widget class="QLabel" name="labelStoreHint">
+      <property name="text">
+       <string>Extensionless files = text. Files with extensions = paste path. Folders = nested menus.</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="hboxStore">
+      <property name="spacing">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLineEdit" name="editStorePath">
+        <property name="placeholderText">
+         <string>Path to store folder</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnBrowseStore">
+        <property name="text">
+         <string>Browse…</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </item>
     <item>
      <widget class="QLabel" name="labelGlobalTitle">
@@ -103,6 +174,74 @@
      </layout>
     </item>
     <item>
+     <widget class="QLabel" name="labelPasteTextTitle">
+      <property name="text">
+       <string>Paste text only</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <widget class="QLabel" name="labelPasteTextHint">
+      <property name="text">
+       <string>Strips images/HTML from the clipboard (e.g. OneNote), then pastes plain text. Also first item in the picker.</string>
+      </property>
+     </widget>
+    </item>
+    <item>
+     <layout class="QHBoxLayout" name="hboxPasteText">
+      <property name="spacing">
+       <number>10</number>
+      </property>
+      <item>
+       <widget class="QKeySequenceEdit" name="keySeqPasteText">
+        <property name="toolTip">
+         <string>Click, then press a key combination.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnClearPasteText">
+        <property name="text">
+         <string>Clear</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="labelPasteTextStatus">
+        <property name="visible">
+         <bool>false</bool>
+        </property>
+        <property name="text">
+         <string/>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="btnPasteTextOnly">
+        <property name="text">
+         <string>Paste text only</string>
+        </property>
+        <property name="toolTip">
+         <string>Replace clipboard with plain text and paste into the focused app</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacerPasteText">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>20</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+     </layout>
+    </item>
+    <item>
      <layout class="QHBoxLayout" name="hboxItemsHeader">
       <item>
        <widget class="QLabel" name="labelItems">
@@ -127,7 +266,7 @@
       <item>
        <widget class="QLabel" name="labelHint">
         <property name="text">
-         <string>Active or failed shows next to each shortcut</string>
+         <string>Use arrows to edit order (saved to meta.json)</string>
         </property>
        </widget>
       </item>
@@ -171,7 +310,7 @@
     <item>
      <widget class="QPushButton" name="btnAddItem">
       <property name="text">
-       <string>Add item</string>
+       <string>Add text item</string>
       </property>
      </widget>
     </item>

@@ -6,17 +6,25 @@
 class QLineEdit;
 class QPlainTextEdit;
 class QKeySequenceEdit;
+class QLabel;
 
 class ItemEditorDialog : public QDialog
 {
     Q_OBJECT
 public:
-    explicit ItemEditorDialog(const PasteItem &item, QWidget *parent = nullptr);
+    // kind controls which fields are editable.
+    // Text: name + content + hotkey
+    // Path: name (read-only path shown) + hotkey
+    // Folder: name only (informational)
+    explicit ItemEditorDialog(const StoreEntry &entry, QWidget *parent = nullptr);
 
-    PasteItem item() const;
+    QString name() const;
+    QString text() const;
+    QKeySequence hotkey() const;
 
 private:
-    QLineEdit        *m_titleEdit;
-    QPlainTextEdit   *m_textEdit;
-    QKeySequenceEdit *m_hotkeyEdit;
+    StoreEntryKind    m_kind;
+    QLineEdit        *m_nameEdit;
+    QPlainTextEdit   *m_textEdit = nullptr;
+    QKeySequenceEdit *m_hotkeyEdit = nullptr;
 };

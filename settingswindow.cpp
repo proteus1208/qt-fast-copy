@@ -1,6 +1,7 @@
 #include "settingswindow.h"
 #include "ui_settingswindow.h"
 #include "itemeditordiag.h"
+#include "storagemanager.h"
 #include "appstyle.h"
 
 #include <QHBoxLayout>
@@ -12,6 +13,15 @@
 #include <QStyle>
 #include <QIcon>
 #include <QKeySequenceEdit>
+#include <QFileDialog>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QMessageBox>
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QSet>
+#include <QIODevice>
 
 namespace {
 
@@ -50,6 +60,16 @@ private:
     QString m_fullText;
 };
 
+QString kindLabel(StoreEntryKind kind)
+{
+    switch (kind) {
+    case StoreEntryKind::Text:   return QStringLiteral("Text");
+    case StoreEntryKind::Path:   return QStringLiteral("Path");
+    case StoreEntryKind::Folder: return QStringLiteral("Folder");
+    }
+    return {};
+}
+
 } // namespace
 
 SettingsWindow::SettingsWindow(QWidget *parent)
@@ -61,26 +81,48 @@ SettingsWindow::SettingsWindow(QWidget *parent)
 
     ui->labelPageTitle->setObjectName("labelPageTitle");
     ui->labelPageSubtitle->setObjectName("labelPageSubtitle");
+    ui->labelStoreTitle->setObjectName("labelGlobalTitle");
+    ui->labelStoreHint->setObjectName("labelGlobalHint");
     ui->labelGlobalTitle->setObjectName("labelGlobalTitle");
     ui->labelGlobalHint->setObjectName("labelGlobalHint");
+    ui->labelPasteTextTitle->setObjectName("labelGlobalTitle");
+    ui->labelPasteTextHint->setObjectName("labelGlobalHint");
     ui->labelItems->setObjectName("labelItems");
     ui->labelHint->setObjectName("labelHint");
     ui->btnAddItem->setObjectName("btnAddItem");
     ui->btnClearGlobal->setObjectName("btnClearGlobal");
+    ui->btnClearPasteText->setObjectName("btnClearGlobal");
+    ui->btnBrowseStore->setObjectName("btnGhost");
+    ui->btnOpenStore->setObjectName("btnLink");
+    ui->btnOpenStore->setCursor(Qt::PointingHandCursor);
     ui->scrollArea->setWidgetResizable(true);
 
+    forceBlackInputText(ui->editStorePath);
     forceBlackInputText(ui->keySeqEdit);
+    forceBlackInputText(ui->keySeqPasteText);
     if (auto *inner = ui->keySeqEdit->findChild<QLineEdit *>())
         forceBlackInputText(inner);
+    if (auto *inner = ui->keySeqPasteText->findChild<QLineEdit *>())
+        forceBlackInputText(inner);
+
+    ui->keySeqEdit->setMaximumSequenceLength(1);
+    ui->keySeqPasteText->setMaximumSequenceLength(1);
 
     m_listContainer = ui->scrollAreaWidgetContents;
     m_listLayout    = qobject_cast<QVBoxLayout *>(m_listContainer->layout());
     m_listLayout->setAlignment(Qt::AlignTop);
 
     connect(ui->btnAddItem, &QPushButton::clicked, this, &SettingsWindow::onAddItem);
+    connect(ui->btnBrowseStore, &QPushButton::clicked, this, &SettingsWindow::onBrowseStore);
+    connect(ui->btnOpenStore, &QPushButton::clicked, this, &SettingsWindow::onOpenStore);
+    connect(ui->editStorePath, &QLineEdit::editingFinished, this, &SettingsWindow::onStorePathEdited);
     connect(ui->btnClearGlobal, &QPushButton::clicked, ui->keySeqEdit, &QKeySequenceEdit::clear);
+    connect(ui->btnClearPasteText, &QPushButton::clicked, ui->keySeqPasteText, &QKeySequenceEdit::clear);
+    connect(ui->btnPasteTextOnly, &QPushButton::clicked, this, &SettingsWindow::pasteTextOnlyRequested);
     connect(ui->keySeqEdit, &QKeySequenceEdit::keySequenceChanged,
             this, &SettingsWindow::onGlobalHotkeyChanged);
+    connect(ui->keySeqPasteText, &QKeySequenceEdit::keySequenceChanged,
+            this, &SettingsWindow::onPasteTextHotkeyChanged);
 }
 
 SettingsWindow::~SettingsWindow()
@@ -99,16 +141,41 @@ void SettingsWindow::setHotkeyManager(HotkeyManager *mgr)
                 this, &SettingsWindow::rebuildList);
 }
 
-void SettingsWindow::setData(const QList<PasteItem> &items, const QKeySequence &globalHotkey)
+void SettingsWindow::setAppSettings(const AppSettings &settings)
 {
-    m_items        = items;
-    m_globalHotkey = globalHotkey;
+    m_app = settings;
+
+    ui->editStorePath->blockSignals(true);
+    ui->editStorePath->setText(QDir::toNativeSeparators(m_app.storePath));
+    ui->editStorePath->blockSignals(false);
 
     ui->keySeqEdit->blockSignals(true);
-    ui->keySeqEdit->setKeySequence(globalHotkey);
+    ui->keySeqEdit->setKeySequence(m_app.globalHotkey);
     ui->keySeqEdit->blockSignals(false);
 
+    ui->keySeqPasteText->blockSignals(true);
+    ui->keySeqPasteText->setKeySequence(m_app.pasteTextOnlyHotkey);
+    ui->keySeqPasteText->blockSignals(false);
+
     rebuildList();
+}
+
+void SettingsWindow::setRootEntries(const QList<StoreEntry> &entries)
+{
+    m_entries = entries;
+    rebuildList();
+}
+
+void SettingsWindow::emitAppSettings()
+{
+    emit appSettingsChanged(m_app);
+}
+
+void SettingsWindow::persistOrder()
+{
+    StorageManager::saveDirectoryMeta(m_app.storePath, m_entries);
+    rebuildList();
+    emit storeChanged();
 }
 
 void SettingsWindow::rebuildList()
@@ -121,9 +188,10 @@ void SettingsWindow::rebuildList()
     }
 
     const bool pickerOk = m_hotkeyMgr ? m_hotkeyMgr->isPickerRegistered() : false;
-    const QSet<int> itemOkSet = m_hotkeyMgr ? m_hotkeyMgr->registeredItemIndices() : QSet<int>{};
+    const bool pasteTextOk = m_hotkeyMgr ? m_hotkeyMgr->isPasteTextOnlyRegistered() : false;
+    const QSet<QString> itemOkSet = m_hotkeyMgr ? m_hotkeyMgr->registeredItemPaths() : QSet<QString>{};
 
-    if (!m_globalHotkey.isEmpty()) {
+    if (!m_app.globalHotkey.isEmpty()) {
         ui->labelGlobalStatus->setVisible(true);
         ui->labelGlobalStatus->setObjectName(pickerOk ? "statusOk" : "statusFail");
         ui->labelGlobalStatus->setText(pickerOk ? "Active" : "Failed");
@@ -136,8 +204,21 @@ void SettingsWindow::rebuildList()
         ui->labelGlobalStatus->setVisible(false);
     }
 
-    for (int i = 0; i < m_items.size(); ++i) {
-        const PasteItem &item = m_items[i];
+    if (!m_app.pasteTextOnlyHotkey.isEmpty()) {
+        ui->labelPasteTextStatus->setVisible(true);
+        ui->labelPasteTextStatus->setObjectName(pasteTextOk ? "statusOk" : "statusFail");
+        ui->labelPasteTextStatus->setText(pasteTextOk ? "Active" : "Failed");
+        ui->labelPasteTextStatus->setToolTip(pasteTextOk
+            ? "Paste-text-only shortcut is registered."
+            : "Could not register this shortcut. It may already be in use.");
+        ui->labelPasteTextStatus->style()->unpolish(ui->labelPasteTextStatus);
+        ui->labelPasteTextStatus->style()->polish(ui->labelPasteTextStatus);
+    } else {
+        ui->labelPasteTextStatus->setVisible(false);
+    }
+
+    for (int i = 0; i < m_entries.size(); ++i) {
+        const StoreEntry &item = m_entries[i];
 
         auto *row = new QWidget(m_listContainer);
         row->setObjectName("itemCard");
@@ -152,6 +233,11 @@ void SettingsWindow::rebuildList()
         numLabel->setAlignment(Qt::AlignCenter);
         hl->addWidget(numLabel);
 
+        auto *iconLabel = new QLabel(row);
+        iconLabel->setPixmap(item.icon.pixmap(18, 18));
+        iconLabel->setFixedSize(20, 20);
+        hl->addWidget(iconLabel);
+
         auto *textBlock = new QWidget(row);
         textBlock->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
         textBlock->setMinimumWidth(0);
@@ -159,27 +245,34 @@ void SettingsWindow::rebuildList()
         vl->setContentsMargins(0, 0, 0, 0);
         vl->setSpacing(2);
 
-        const QString titleText = item.title.trimmed().isEmpty()
-            ? QString("Untitled item %1").arg(i + 1)
-            : item.title;
         auto *titleLabel = new ElidedLabel(textBlock);
         titleLabel->setObjectName("itemTitle");
-        titleLabel->setFullText(titleText);
+        titleLabel->setFullText(item.name);
         vl->addWidget(titleLabel);
 
-        QString preview = item.text.trimmed();
-        preview.replace(QLatin1Char('\n'), QLatin1Char(' '));
-        preview = preview.simplified();
-        if (!preview.isEmpty()) {
-            auto *previewLabel = new ElidedLabel(textBlock);
-            previewLabel->setObjectName("itemPreview");
-            previewLabel->setFullText(preview);
-            vl->addWidget(previewLabel);
+        QString preview = kindLabel(item.kind);
+        if (item.kind == StoreEntryKind::Text) {
+            // Preview only — avoid loading huge files into the settings list.
+            QFile f(item.absolutePath);
+            QString body;
+            if (f.open(QIODevice::ReadOnly))
+                body = QString::fromUtf8(f.read(240)).trimmed();
+            body.replace(QLatin1Char('\n'), QLatin1Char(' '));
+            body = body.simplified();
+            if (!body.isEmpty())
+                preview += QStringLiteral(" · ") + body;
+        } else if (item.kind == StoreEntryKind::Path) {
+            preview += QStringLiteral(" · ") + QDir::toNativeSeparators(item.absolutePath);
         }
+
+        auto *previewLabel = new ElidedLabel(textBlock);
+        previewLabel->setObjectName("itemPreview");
+        previewLabel->setFullText(preview);
+        vl->addWidget(previewLabel);
         hl->addWidget(textBlock, 1);
 
-        if (!item.hotkey.isEmpty()) {
-            const bool hkOk = itemOkSet.contains(i);
+        if (!item.hotkey.isEmpty() && item.kind != StoreEntryKind::Folder) {
+            const bool hkOk = itemOkSet.contains(item.absolutePath);
             auto *status = new QLabel(hkOk ? item.hotkey.toString() + "  Active"
                                            : item.hotkey.toString() + "  Failed", row);
             status->setObjectName(hkOk ? "statusOk" : "statusFail");
@@ -228,63 +321,168 @@ void SettingsWindow::rebuildList()
         m_listLayout->addWidget(row);
     }
 
-    if (m_items.isEmpty()) {
-        auto *empty = new QLabel("No items yet. Add one to start pasting instantly.", m_listContainer);
+    if (m_entries.isEmpty()) {
+        auto *empty = new QLabel(
+            QStringLiteral("Store folder is empty. Add a text item, or drop files/folders in Explorer."),
+            m_listContainer);
         empty->setObjectName("labelPageSubtitle");
         empty->setAlignment(Qt::AlignCenter);
         empty->setMinimumHeight(80);
+        empty->setWordWrap(true);
         m_listLayout->addWidget(empty);
     }
 }
 
 void SettingsWindow::onAddItem()
 {
-    PasteItem item;
-    ItemEditorDialog dlg(item, this);
-    if (dlg.exec() == QDialog::Accepted) {
-        m_items.append(dlg.item());
-        rebuildList();
-        emit dataChanged(m_items, m_globalHotkey);
+    StoreEntry blank;
+    blank.kind = StoreEntryKind::Text;
+    ItemEditorDialog dlg(blank, this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    QString error;
+    if (!StorageManager::createTextItem(m_app.storePath, dlg.name(), dlg.text(), dlg.hotkey(), &error)) {
+        QMessageBox::warning(this, QStringLiteral("Add item"), error);
+        return;
     }
+    m_entries = StorageManager::loadDirectory(m_app.storePath);
+    rebuildList();
+    emit storeChanged();
 }
 
 void SettingsWindow::onEditItem(int index)
 {
-    if (index < 0 || index >= m_items.size()) return;
-    ItemEditorDialog dlg(m_items[index], this);
-    if (dlg.exec() == QDialog::Accepted) {
-        m_items[index] = dlg.item();
-        rebuildList();
-        emit dataChanged(m_items, m_globalHotkey);
+    if (index < 0 || index >= m_entries.size()) return;
+    StoreEntry entry = m_entries[index];
+    ItemEditorDialog dlg(entry, this);
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+
+    if (entry.kind == StoreEntryKind::Text) {
+        const QString newName = dlg.name();
+        if (newName.isEmpty()) {
+            QMessageBox::warning(this, QStringLiteral("Edit item"),
+                                 QStringLiteral("Name is required."));
+            return;
+        }
+
+        // Rename if needed (still extensionless).
+        if (newName != entry.name) {
+            if (newName.contains(QLatin1Char('.')) || newName.contains(QLatin1Char('/'))
+                || newName.contains(QLatin1Char('\\'))) {
+                QMessageBox::warning(this, QStringLiteral("Edit item"),
+                                     QStringLiteral("Use a name without extension or path separators."));
+                return;
+            }
+            const QString newPath = QDir(m_app.storePath).filePath(newName);
+            if (QFileInfo::exists(newPath)) {
+                QMessageBox::warning(this, QStringLiteral("Edit item"),
+                                     QStringLiteral("An item with that name already exists."));
+                return;
+            }
+            if (!QFile::rename(entry.absolutePath, newPath)) {
+                QMessageBox::warning(this, QStringLiteral("Edit item"),
+                                     QStringLiteral("Could not rename the file."));
+                return;
+            }
+            entry.absolutePath = newPath;
+            entry.name = newName;
+        }
+
+        if (!StorageManager::writeTextFile(entry.absolutePath, dlg.text())) {
+            QMessageBox::warning(this, QStringLiteral("Edit item"),
+                                 QStringLiteral("Could not save the text file."));
+            return;
+        }
+        entry.hotkey = dlg.hotkey();
+        m_entries[index] = entry;
+        persistOrder();
+        return;
     }
+
+    if (entry.kind == StoreEntryKind::Path) {
+        entry.hotkey = dlg.hotkey();
+        m_entries[index] = entry;
+        persistOrder();
+    }
+    // Folder: nothing editable beyond order.
 }
 
 void SettingsWindow::onRemoveItem(int index)
 {
-    if (index < 0 || index >= m_items.size()) return;
-    m_items.removeAt(index);
+    if (index < 0 || index >= m_entries.size()) return;
+    const StoreEntry entry = m_entries[index];
+
+    const auto reply = QMessageBox::question(
+        this,
+        QStringLiteral("Remove item"),
+        QStringLiteral("Delete \"%1\" from the store folder?").arg(entry.name),
+        QMessageBox::Yes | QMessageBox::No,
+        QMessageBox::No);
+    if (reply != QMessageBox::Yes)
+        return;
+
+    QString error;
+    if (!StorageManager::removeEntry(entry.absolutePath, &error)) {
+        QMessageBox::warning(this, QStringLiteral("Remove item"), error);
+        return;
+    }
+    m_entries = StorageManager::loadDirectory(m_app.storePath);
     rebuildList();
-    emit dataChanged(m_items, m_globalHotkey);
+    emit storeChanged();
 }
 
 void SettingsWindow::onMoveUp(int index)
 {
-    if (index <= 0 || index >= m_items.size()) return;
-    m_items.swapItemsAt(index - 1, index);
-    rebuildList();
-    emit dataChanged(m_items, m_globalHotkey);
+    if (index <= 0 || index >= m_entries.size()) return;
+    m_entries.swapItemsAt(index - 1, index);
+    persistOrder();
 }
 
 void SettingsWindow::onMoveDown(int index)
 {
-    if (index < 0 || index >= m_items.size() - 1) return;
-    m_items.swapItemsAt(index, index + 1);
-    rebuildList();
-    emit dataChanged(m_items, m_globalHotkey);
+    if (index < 0 || index >= m_entries.size() - 1) return;
+    m_entries.swapItemsAt(index, index + 1);
+    persistOrder();
+}
+
+void SettingsWindow::onBrowseStore()
+{
+    const QString dir = QFileDialog::getExistingDirectory(
+        this,
+        QStringLiteral("Choose store folder"),
+        m_app.storePath);
+    if (dir.isEmpty())
+        return;
+    m_app.storePath = dir;
+    ui->editStorePath->setText(QDir::toNativeSeparators(dir));
+    emitAppSettings();
+}
+
+void SettingsWindow::onOpenStore()
+{
+    StorageManager::ensureStoreFolder(m_app.storePath);
+    QDesktopServices::openUrl(QUrl::fromLocalFile(m_app.storePath));
+}
+
+void SettingsWindow::onStorePathEdited()
+{
+    const QString path = QDir::fromNativeSeparators(ui->editStorePath->text().trimmed());
+    if (path.isEmpty() || path == m_app.storePath)
+        return;
+    m_app.storePath = path;
+    emitAppSettings();
 }
 
 void SettingsWindow::onGlobalHotkeyChanged()
 {
-    m_globalHotkey = ui->keySeqEdit->keySequence();
-    emit dataChanged(m_items, m_globalHotkey);
+    m_app.globalHotkey = ui->keySeqEdit->keySequence();
+    emitAppSettings();
+}
+
+void SettingsWindow::onPasteTextHotkeyChanged()
+{
+    m_app.pasteTextOnlyHotkey = ui->keySeqPasteText->keySequence();
+    emitAppSettings();
 }

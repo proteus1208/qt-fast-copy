@@ -1,5 +1,6 @@
 #include "itemeditordiag.h"
 #include "appstyle.h"
+#include "storagemanager.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -8,11 +9,15 @@
 #include <QPlainTextEdit>
 #include <QKeySequenceEdit>
 #include <QPushButton>
+#include <QFileInfo>
+#include <QDir>
 
-ItemEditorDialog::ItemEditorDialog(const PasteItem &item, QWidget *parent)
+ItemEditorDialog::ItemEditorDialog(const StoreEntry &entry, QWidget *parent)
     : QDialog(parent)
+    , m_kind(entry.kind)
 {
-    setWindowTitle("Edit item");
+    const bool isNew = entry.absolutePath.isEmpty();
+    setWindowTitle(isNew ? QStringLiteral("Add text item") : QStringLiteral("Edit item"));
     setMinimumSize(440, 380);
     setModal(true);
     setStyleSheet(appStyleSheet());
@@ -21,68 +26,104 @@ ItemEditorDialog::ItemEditorDialog(const PasteItem &item, QWidget *parent)
     mainLayout->setSpacing(6);
     mainLayout->setContentsMargins(14, 12, 14, 12);
 
-    auto *title = new QLabel("Edit item", this);
+    auto *title = new QLabel(windowTitle(), this);
     title->setObjectName("dialogTitle");
-    auto *subtitle = new QLabel("Title appears in the picker. Text is what gets pasted.", this);
+    QString subtitleText;
+    switch (m_kind) {
+    case StoreEntryKind::Text:
+        subtitleText = QStringLiteral("Name is the file name (no extension). Text is pasted.");
+        break;
+    case StoreEntryKind::Path:
+        subtitleText = QStringLiteral("Activating this item pastes the absolute file path.");
+        break;
+    case StoreEntryKind::Folder:
+        subtitleText = QStringLiteral("Folders open as nested menus in the picker.");
+        break;
+    }
+    auto *subtitle = new QLabel(subtitleText, this);
     subtitle->setObjectName("dialogSubtitle");
     subtitle->setWordWrap(true);
     mainLayout->addWidget(title);
     mainLayout->addWidget(subtitle);
 
-    auto *titleLabel = new QLabel("Title", this);
-    titleLabel->setObjectName("fieldLabel");
-    m_titleEdit = new QLineEdit(this);
-    m_titleEdit->setPlaceholderText("Shown in the picker menu");
-    m_titleEdit->setText(item.title);
-    m_titleEdit->setMaxLength(80);
-    forceBlackInputText(m_titleEdit);
-    mainLayout->addWidget(titleLabel);
-    mainLayout->addWidget(m_titleEdit);
+    auto *nameLabel = new QLabel(QStringLiteral("Name"), this);
+    nameLabel->setObjectName("fieldLabel");
+    m_nameEdit = new QLineEdit(this);
+    m_nameEdit->setText(entry.name);
+    m_nameEdit->setMaxLength(120);
+    forceBlackInputText(m_nameEdit);
 
-    auto *textLabel = new QLabel("Text", this);
-    textLabel->setObjectName("fieldLabel");
-    m_textEdit = new QPlainTextEdit(this);
-    m_textEdit->setPlaceholderText("Paste content. Use Enter for new lines.");
-    m_textEdit->setPlainText(item.text);
-    m_textEdit->setMinimumHeight(110);
-    m_textEdit->setTabChangesFocus(true);
-    forceBlackInputText(m_textEdit);
-    auto *textHint = new QLabel("This is pasted into the focused field.", this);
-    textHint->setObjectName("fieldHint");
-    textHint->setWordWrap(true);
-    mainLayout->addWidget(textLabel);
-    mainLayout->addWidget(m_textEdit, 1);
-    mainLayout->addWidget(textHint);
+    if (m_kind == StoreEntryKind::Text) {
+        m_nameEdit->setPlaceholderText(QStringLiteral("file name without extension"));
+    } else {
+        m_nameEdit->setReadOnly(true);
+        m_nameEdit->setToolTip(entry.absolutePath);
+    }
+    mainLayout->addWidget(nameLabel);
+    mainLayout->addWidget(m_nameEdit);
 
-    auto *hkLabel = new QLabel("Global shortcut", this);
-    hkLabel->setObjectName("fieldLabel");
-    auto *hkHint = new QLabel("Optional. Works in any app without opening this window.", this);
-    hkHint->setObjectName("fieldHint");
-    hkHint->setWordWrap(true);
+    if (m_kind == StoreEntryKind::Path || m_kind == StoreEntryKind::Folder) {
+        auto *pathLabel = new QLabel(QStringLiteral("Path"), this);
+        pathLabel->setObjectName("fieldLabel");
+        auto *pathValue = new QLabel(QDir::toNativeSeparators(entry.absolutePath), this);
+        pathValue->setObjectName("fieldHint");
+        pathValue->setWordWrap(true);
+        pathValue->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        mainLayout->addWidget(pathLabel);
+        mainLayout->addWidget(pathValue);
+    }
 
-    auto *hkRow = new QHBoxLayout;
-    hkRow->setSpacing(10);
-    m_hotkeyEdit = new QKeySequenceEdit(this);
-    m_hotkeyEdit->setKeySequence(item.hotkey);
-    m_hotkeyEdit->setMaximumSequenceLength(1);
-    forceBlackInputText(m_hotkeyEdit);
-    if (auto *inner = m_hotkeyEdit->findChild<QLineEdit *>())
-        forceBlackInputText(inner);
-    auto *clearBtn = new QPushButton("Clear", this);
-    clearBtn->setObjectName("btnClearGlobal");
-    connect(clearBtn, &QPushButton::clicked, m_hotkeyEdit, &QKeySequenceEdit::clear);
-    hkRow->addWidget(m_hotkeyEdit, 1);
-    hkRow->addWidget(clearBtn);
+    if (m_kind == StoreEntryKind::Text) {
+        auto *textLabel = new QLabel(QStringLiteral("Text"), this);
+        textLabel->setObjectName("fieldLabel");
+        m_textEdit = new QPlainTextEdit(this);
+        m_textEdit->setPlaceholderText(QStringLiteral("Paste content. Use Enter for new lines."));
+        if (!entry.absolutePath.isEmpty())
+            m_textEdit->setPlainText(StorageManager::readTextFile(entry.absolutePath));
+        m_textEdit->setMinimumHeight(110);
+        m_textEdit->setTabChangesFocus(true);
+        forceBlackInputText(m_textEdit);
+        auto *textHint = new QLabel(QStringLiteral("This is pasted into the focused field."), this);
+        textHint->setObjectName("fieldHint");
+        textHint->setWordWrap(true);
+        mainLayout->addWidget(textLabel);
+        mainLayout->addWidget(m_textEdit, 1);
+        mainLayout->addWidget(textHint);
+    } else {
+        mainLayout->addStretch(1);
+    }
 
-    mainLayout->addWidget(hkLabel);
-    mainLayout->addWidget(hkHint);
-    mainLayout->addLayout(hkRow);
+    if (m_kind != StoreEntryKind::Folder) {
+        auto *hkLabel = new QLabel(QStringLiteral("Global shortcut"), this);
+        hkLabel->setObjectName("fieldLabel");
+        auto *hkHint = new QLabel(QStringLiteral("Optional. Works in any app without opening the picker."), this);
+        hkHint->setObjectName("fieldHint");
+        hkHint->setWordWrap(true);
+
+        auto *hkRow = new QHBoxLayout;
+        hkRow->setSpacing(10);
+        m_hotkeyEdit = new QKeySequenceEdit(this);
+        m_hotkeyEdit->setKeySequence(entry.hotkey);
+        m_hotkeyEdit->setMaximumSequenceLength(1);
+        forceBlackInputText(m_hotkeyEdit);
+        if (auto *inner = m_hotkeyEdit->findChild<QLineEdit *>())
+            forceBlackInputText(inner);
+        auto *clearBtn = new QPushButton(QStringLiteral("Clear"), this);
+        clearBtn->setObjectName("btnClearGlobal");
+        connect(clearBtn, &QPushButton::clicked, m_hotkeyEdit, &QKeySequenceEdit::clear);
+        hkRow->addWidget(m_hotkeyEdit, 1);
+        hkRow->addWidget(clearBtn);
+
+        mainLayout->addWidget(hkLabel);
+        mainLayout->addWidget(hkHint);
+        mainLayout->addLayout(hkRow);
+    }
 
     auto *actions = new QHBoxLayout;
     actions->addStretch();
-    auto *cancelBtn = new QPushButton("Cancel", this);
+    auto *cancelBtn = new QPushButton(QStringLiteral("Cancel"), this);
     cancelBtn->setObjectName("btnCancel");
-    auto *saveBtn = new QPushButton("Save", this);
+    auto *saveBtn = new QPushButton(isNew ? QStringLiteral("Add") : QStringLiteral("Save"), this);
     saveBtn->setObjectName("btnSave");
     saveBtn->setDefault(true);
     connect(cancelBtn, &QPushButton::clicked, this, &QDialog::reject);
@@ -91,14 +132,20 @@ ItemEditorDialog::ItemEditorDialog(const PasteItem &item, QWidget *parent)
     actions->addWidget(saveBtn);
     mainLayout->addLayout(actions);
 
-    m_titleEdit->setFocus();
+    m_nameEdit->setFocus();
 }
 
-PasteItem ItemEditorDialog::item() const
+QString ItemEditorDialog::name() const
 {
-    PasteItem p;
-    p.title  = m_titleEdit->text().trimmed();
-    p.text   = m_textEdit->toPlainText();
-    p.hotkey = m_hotkeyEdit->keySequence();
-    return p;
+    return m_nameEdit->text().trimmed();
+}
+
+QString ItemEditorDialog::text() const
+{
+    return m_textEdit ? m_textEdit->toPlainText() : QString();
+}
+
+QKeySequence ItemEditorDialog::hotkey() const
+{
+    return m_hotkeyEdit ? m_hotkeyEdit->keySequence() : QKeySequence();
 }

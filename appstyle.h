@@ -43,7 +43,9 @@ inline QString appStyleSheet()
         QLabel#labelGlobalTitle,
         QLabel#labelItems,
         QLabel#fieldLabel,
-        QLabel#dialogTitle {
+        QLabel#dialogTitle,
+        QLabel#labelStoreTitle,
+        QLabel#labelPasteTextTitle {
             font-size: 13px;
             font-weight: 600;
             color: #111827;
@@ -147,6 +149,23 @@ inline QString appStyleSheet()
         QPushButton#btnGhost:hover, QPushButton#btnClearGlobal:hover, QPushButton#btnCancel:hover {
             background: #e5e7eb;
             color: #111827;
+        }
+        QPushButton#btnLink {
+            background: transparent;
+            border: none;
+            color: #2563eb;
+            font-weight: 600;
+            text-decoration: underline;
+            padding: 0;
+            min-height: 0;
+        }
+        QPushButton#btnLink:hover {
+            color: #1d4ed8;
+            background: transparent;
+        }
+        QPushButton#btnLink:pressed {
+            color: #1e40af;
+            background: transparent;
         }
         QPushButton#btnIcon {
             background: transparent;

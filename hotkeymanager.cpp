@@ -10,6 +10,9 @@
 
 namespace {
 
+constexpr int kActionPicker = -1;
+constexpr int kActionPasteTextOnly = -2;
+
 class HotkeySinkWidget : public QWidget
 {
 public:
@@ -131,7 +134,7 @@ HotkeyManager::HotkeyManager(QObject *parent)
     : QObject(parent)
 {
     m_sink = new HotkeySinkWidget([this](int id) { return handleHotkeyId(id); });
-    m_sink->winId(); // force HWND creation so RegisterHotKey has a target
+    m_sink->winId();
 
     qApp->installNativeEventFilter(this);
 }
@@ -149,9 +152,14 @@ bool HotkeyManager::isPickerRegistered() const
     return m_pickerOk;
 }
 
-QSet<int> HotkeyManager::registeredItemIndices() const
+bool HotkeyManager::isPasteTextOnlyRegistered() const
 {
-    return m_itemOkIndices;
+    return m_pasteTextOk;
+}
+
+QSet<QString> HotkeyManager::registeredItemPaths() const
+{
+    return m_itemOkPaths;
 }
 
 #ifdef Q_OS_WIN
@@ -163,12 +171,16 @@ void *HotkeyManager::nativeHwnd() const
 }
 #endif
 
-void HotkeyManager::setGlobalHotkey(const QKeySequence &seq)
+void HotkeyManager::unregisterByAction(int action)
 {
     QList<int> toRemove;
-    for (auto it = m_idToIndex.begin(); it != m_idToIndex.end(); ++it) {
-        if (it.value() == -1)
+    for (auto it = m_idToAction.begin(); it != m_idToAction.end(); ++it) {
+        if (action >= 0) {
+            if (it.value() >= 0)
+                toRemove.append(it.key());
+        } else if (it.value() == action) {
             toRemove.append(it.key());
+        }
     }
 
 #ifdef Q_OS_WIN
@@ -176,27 +188,45 @@ void HotkeyManager::setGlobalHotkey(const QKeySequence &seq)
     for (int id : toRemove) {
         if (hwnd)
             UnregisterHotKey(hwnd, id);
-        m_idToIndex.remove(id);
+        m_idToAction.remove(id);
     }
 #else
     for (int id : toRemove)
-        m_idToIndex.remove(id);
+        m_idToAction.remove(id);
 #endif
+}
 
+void HotkeyManager::setGlobalHotkey(const QKeySequence &seq)
+{
+    unregisterByAction(kActionPicker);
     m_pickerOk = false;
     if (!seq.isEmpty())
-        m_pickerOk = registerKey(seq, -1);
-
+        m_pickerOk = registerKey(seq, kActionPicker);
     emit registrationChanged();
 }
 
-void HotkeyManager::setItemHotkeys(const QList<PasteItem> &items)
+void HotkeyManager::setPasteTextOnlyHotkey(const QKeySequence &seq)
+{
+    unregisterByAction(kActionPasteTextOnly);
+    m_pasteTextOk = false;
+    if (!seq.isEmpty())
+        m_pasteTextOk = registerKey(seq, kActionPasteTextOnly);
+    emit registrationChanged();
+}
+
+void HotkeyManager::setItemHotkeys(const QList<QPair<QString, QKeySequence>> &pathAndHotkey)
 {
     unregisterItemHotkeys();
+    m_paths.clear();
+    m_paths.reserve(pathAndHotkey.size());
 
-    for (int i = 0; i < items.size(); ++i) {
-        if (!items[i].hotkey.isEmpty() && registerKey(items[i].hotkey, i))
-            m_itemOkIndices.insert(i);
+    for (const auto &pair : pathAndHotkey) {
+        if (pair.second.isEmpty() || pair.first.isEmpty())
+            continue;
+        const int action = m_paths.size();
+        m_paths.append(pair.first);
+        if (registerKey(pair.second, action))
+            m_itemOkPaths.insert(pair.first);
     }
 
     emit registrationChanged();
@@ -204,25 +234,8 @@ void HotkeyManager::setItemHotkeys(const QList<PasteItem> &items)
 
 void HotkeyManager::unregisterItemHotkeys()
 {
-    QList<int> toRemove;
-    for (auto it = m_idToIndex.begin(); it != m_idToIndex.end(); ++it) {
-        if (it.value() >= 0)
-            toRemove.append(it.key());
-    }
-
-#ifdef Q_OS_WIN
-    HWND hwnd = static_cast<HWND>(nativeHwnd());
-    for (int id : toRemove) {
-        if (hwnd)
-            UnregisterHotKey(hwnd, id);
-        m_idToIndex.remove(id);
-    }
-#else
-    for (int id : toRemove)
-        m_idToIndex.remove(id);
-#endif
-
-    m_itemOkIndices.clear();
+    unregisterByAction(0); // clears all action >= 0
+    m_itemOkPaths.clear();
 }
 
 void HotkeyManager::unregisterAll()
@@ -230,16 +243,18 @@ void HotkeyManager::unregisterAll()
 #ifdef Q_OS_WIN
     HWND hwnd = static_cast<HWND>(nativeHwnd());
     if (hwnd) {
-        for (int id : m_idToIndex.keys())
+        for (int id : m_idToAction.keys())
             UnregisterHotKey(hwnd, id);
     }
 #endif
-    m_idToIndex.clear();
+    m_idToAction.clear();
+    m_paths.clear();
     m_pickerOk = false;
-    m_itemOkIndices.clear();
+    m_pasteTextOk = false;
+    m_itemOkPaths.clear();
 }
 
-bool HotkeyManager::registerKey(const QKeySequence &seq, int itemIndex)
+bool HotkeyManager::registerKey(const QKeySequence &seq, int action)
 {
     if (seq.isEmpty())
         return false;
@@ -266,25 +281,31 @@ bool HotkeyManager::registerKey(const QKeySequence &seq, int itemIndex)
         return false;
     }
 
-    m_idToIndex[id] = itemIndex;
+    m_idToAction[id] = action;
     return true;
 #else
     Q_UNUSED(seq);
-    Q_UNUSED(itemIndex);
+    Q_UNUSED(action);
     return false;
 #endif
 }
 
 bool HotkeyManager::handleHotkeyId(int id)
 {
-    const auto it = m_idToIndex.find(id);
-    if (it == m_idToIndex.end())
+    const auto it = m_idToAction.find(id);
+    if (it == m_idToAction.end())
         return false;
 
-    if (it.value() == -1)
+    const int action = it.value();
+    if (action == kActionPicker) {
         emit pickerRequested();
-    else
-        emit itemTriggered(it.value());
+    } else if (action == kActionPasteTextOnly) {
+        emit pasteTextOnlyRequested();
+    } else if (action >= 0 && action < m_paths.size()) {
+        emit itemTriggered(m_paths[action]);
+    } else {
+        return false;
+    }
     return true;
 }
 
